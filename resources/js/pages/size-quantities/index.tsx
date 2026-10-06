@@ -28,10 +28,19 @@ type PivotRow = {
 
 type Meta = { file_no: string; order_no: string; style_no: string };
 
+type RefItem = {
+  ref_no: string;
+  total_qty: number;
+  created_at: string;
+  updated_at: string;
+};
+
 type PageProps = {
   skclNo: string;
   colorName: string;
+  refNo: string;
   colors: string[];
+  refs: RefItem[];
   found: boolean | null;
   meta: Meta | null;
   sizes: string[];
@@ -63,7 +72,17 @@ function recalc(
   });
 }
 
-export default function Index({ skclNo, colorName, colors, found, meta, sizes, rows }: PageProps) {
+export default function Index({
+  skclNo,
+  colorName,
+  refNo,
+  colors,
+  refs,
+  found,
+  meta,
+  sizes,
+  rows,
+}: PageProps) {
   const [search, setSearch] = useState<string>(skclNo ?? '');
   const [color, setColor] = useState<string>(colorName ?? '');
   const [saved, setSaved] = useState<boolean>(false);
@@ -72,25 +91,49 @@ export default function Index({ skclNo, colorName, colors, found, meta, sizes, r
   const [fixedQty, setFixedQty] = useState<string>('');
   const [ratios, setRatios] = useState<Record<string, string>>({});
 
-  const { data, setData, post, processing, errors } = useForm<FormShape>({
+  const { data, setData, post, put, processing, errors } = useForm<FormShape>({
     skcl_no: skclNo ?? '',
     rows: rows ?? [],
   });
 
+  const isEdit = refNo !== '';
+
   useEffect(() => {
     setData({ skcl_no: skclNo ?? '', rows: rows ?? [] });
     setRatios(Object.fromEntries(sizes.map((s) => [s, '1'])));
+    setFixedQty('');
     setSearch(skclNo ?? '');
     setColor(colorName ?? '');
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [skclNo, colorName, rows]);
+  }, [skclNo, colorName, refNo, rows]);
 
+  // Search always opens a fresh blank form (no ref_no sent)
   const handleSearch = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setSaved(false);
     router.get(
       SizeQuantityController.index.url(),
       { skcl_no: search.trim(), color_name: color.trim() },
+      { preserveState: true },
+    );
+  };
+
+  // Load a saved ref for editing
+  const openRef = (ref: string) => {
+    setSaved(false);
+    router.get(
+      SizeQuantityController.index.url(),
+      { skcl_no: skclNo, color_name: colorName, ref_no: ref },
+      { preserveState: true },
+    );
+  };
+
+  // Open a fresh form for the same SKCL / color
+  const newEntry = () => {
+    setSaved(false);
+    router.get(
+      SizeQuantityController.index.url(),
+      { skcl_no: skclNo, color_name: colorName },
       { preserveState: true },
     );
   };
@@ -135,10 +178,16 @@ export default function Index({ skclNo, colorName, colors, found, meta, sizes, r
 
   const handleSave = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    post(SizeQuantityController.store.url(), {
+    const options = {
       preserveScroll: true,
       onSuccess: () => setSaved(true),
-    });
+    };
+
+    if (isEdit) {
+      put(SizeQuantityController.update.url({ ref: refNo }), options);
+    } else {
+      post(SizeQuantityController.store.url(), options);
+    }
   };
 
   const rowTotal = (r: PivotRow): number =>
@@ -194,15 +243,70 @@ export default function Index({ skclNo, colorName, colors, found, meta, sizes, r
           </CardContent>
         </Card>
 
+        {/* Saved refs for this SKCL */}
+        {found && refs.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Saved Refs for {skclNo}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Ref No</TableHead>
+                      <TableHead className="text-right">Total Qty</TableHead>
+                      <TableHead>Created</TableHead>
+                      <TableHead>Last Updated</TableHead>
+                      <TableHead />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {refs.map((r) => (
+                      <TableRow
+                        key={r.ref_no}
+                        className={r.ref_no === refNo ? 'bg-muted/60' : ''}
+                      >
+                        <TableCell className="font-medium">{r.ref_no}</TableCell>
+                        <TableCell className="text-right">{r.total_qty}</TableCell>
+                        <TableCell>{r.created_at}</TableCell>
+                        <TableCell>{r.updated_at}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={r.ref_no === refNo}
+                            onClick={() => openRef(r.ref_no)}
+                          >
+                            {r.ref_no === refNo ? 'Editing' : 'Edit'}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {found && meta && (
           <form onSubmit={handleSave}>
             <Card>
-              <CardHeader>
+              <CardHeader className="flex flex-row items-center justify-between gap-3">
                 <CardTitle className="text-base">
                   SKCL: {skclNo} | File: {meta.file_no} | Order: {meta.order_no} |
                   Style: {meta.style_no}
                   {colorName && ` | Color: ${colorName}`}
+                  {' | '}
+                  {isEdit ? `Editing Ref: ${refNo}` : 'New Entry'}
                 </CardTitle>
+                {isEdit && (
+                  <Button type="button" variant="outline" size="sm" onClick={newEntry}>
+                    New Entry
+                  </Button>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* Fixed qty toolbar */}
@@ -308,7 +412,10 @@ export default function Index({ skclNo, colorName, colors, found, meta, sizes, r
                   </Table>
                 </div>
 
-                {Object.keys(errors).length > 0 && (
+                {errors.rows && (
+                  <p className="text-sm text-destructive">{errors.rows}</p>
+                )}
+                {!errors.rows && Object.keys(errors).length > 0 && (
                   <p className="text-sm text-destructive">
                     There are errors in the input. Please check the numbers.
                   </p>
@@ -316,9 +423,17 @@ export default function Index({ skclNo, colorName, colors, found, meta, sizes, r
 
                 <div className="flex items-center gap-3">
                   <Button type="submit" disabled={processing}>
-                    {processing ? 'Saving...' : 'Save'}
+                    {processing
+                      ? 'Saving...'
+                      : isEdit
+                        ? 'Update'
+                        : 'Save as new Ref'}
                   </Button>
-                  {saved && <span className="text-sm text-green-600">Saved ✔</span>}
+                  {saved && isEdit && (
+                    <span className="text-sm text-green-600">
+                      Saved ✔ Ref: {refNo}
+                    </span>
+                  )}
                 </div>
               </CardContent>
             </Card>

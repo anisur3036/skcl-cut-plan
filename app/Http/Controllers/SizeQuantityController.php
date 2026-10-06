@@ -14,47 +14,51 @@ class SizeQuantityController extends Controller
 
     public function index(Request $request)
     {
-        $skclNo = trim((string) $request->query('skcl_no', ''));
+        $skclNo    = trim((string) $request->query('skcl_no', ''));
+        $colorName = trim((string) $request->query('color_name', ''));
+
+        $base = [
+            'skclNo'    => $skclNo,
+            'colorName' => $colorName,
+            'colors'    => [],
+            'found'     => null,
+            'meta'      => null,
+            'sizes'     => [],
+            'rows'      => [],
+        ];
 
         if ($skclNo === '') {
-            return Inertia::render('size-quantities/index', [
-                'skclNo' => '',
-                'found' => null,
-                'meta' => null,
-                'sizes' => [],
-                'rows' => [],
-            ]);
+            return Inertia::render('size-quantities/index', $base);
         }
 
-        $source = PoSheet::where('skcl_no', $skclNo)->get();
+        $query = PoSheet::where('skcl_no', $skclNo);
+
+        // Color dropdown suggestions (always all colors of this SKCL)
+        $base['colors'] = (clone $query)->distinct()->orderBy('color_name')->pluck('color_name')->all();
+
+        if ($colorName !== '') {
+            $query->where('color_name', $colorName);
+        }
+
+        $source = $query->get();
 
         if ($source->isEmpty()) {
-            return Inertia::render('size-quantities/index', [
-                'skclNo' => $skclNo,
-                'found' => false,
-                'meta' => null,
-                'sizes' => [],
-                'rows' => [],
-            ]);
+            return Inertia::render('size-quantities/index', [...$base, 'found' => false]);
         }
 
-        // Dynamic size columns
         $sizes = $source->pluck('size')->unique()->values()
             ->sortBy(function ($s) {
                 $i = array_search(strtoupper($s), self::SIZE_ORDER, true);
                 return $i === false ? 999 : $i;
             })->values()->all();
 
-        // Previously saved quantities
         $saved = SizeQuantity::where('skcl_no', $skclNo)->get()
             ->keyBy(fn($r) => $this->key($r->country, $r->item_name, $r->color_name, $r->size));
 
-        // Pivot rows: country + item + color
         $rows = $source
             ->groupBy(fn($r) => $r->country . '|' . $r->item_name . '|' . $r->color_name)
             ->map(function ($group) use ($sizes, $saved) {
                 $first = $group->first();
-                $available = $group->pluck('size')->all();
 
                 $quantities = [];
                 foreach ($sizes as $size) {
@@ -66,7 +70,7 @@ class SizeQuantityController extends Controller
                     'country'    => $first->country,
                     'item_name'  => $first->item_name,
                     'color_name' => $first->color_name,
-                    'available'  => $available,   // এই সারিতে কোন সাইজগুলো valid
+                    'available'  => $group->pluck('size')->all(),
                     'quantities' => $quantities,
                 ];
             })->values()->all();
@@ -74,9 +78,9 @@ class SizeQuantityController extends Controller
         $first = $source->first();
 
         return Inertia::render('size-quantities/index', [
-            'skclNo' => $skclNo,
-            'found'  => true,
-            'meta'   => [
+            ...$base,
+            'found' => true,
+            'meta'  => [
                 'file_no'  => $first->file_no,
                 'order_no' => $first->order_no,
                 'style_no' => $first->style_no,

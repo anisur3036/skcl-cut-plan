@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\PoSheet;
 use App\Models\SizeQuantity;
+use App\Models\Table;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -24,34 +25,47 @@ class SizeQuantityController extends Controller
         $highlight = trim((string) $request->query('highlight', ''));
 
         $refs = SizeQuantity::query()
+            ->leftJoin('tables', 'tables.id', '=', 'size_quantities.table_no_id')
             ->select(
-                'ref_no',
-                'skcl_no',
-                'file_no',
-                'order_no',
-                'style_no',
-                DB::raw('GROUP_CONCAT(DISTINCT color_name ORDER BY color_name SEPARATOR ", ") as colors'),
-                DB::raw('SUM(quantity) as total_qty'),
-                DB::raw('MIN(created_at) as first_saved'),
-                DB::raw('MAX(updated_at) as last_saved')
+                'size_quantities.ref_no',
+                'size_quantities.skcl_no',
+                'size_quantities.file_no',
+                'size_quantities.order_no',
+                'size_quantities.style_no',
+                DB::raw('MAX(tables.name) as table_name'),
+                DB::raw('MAX(size_quantities.fixed_qty) as fixed_qty'),
+                //GROUP_CONCAT will be replace for sql_server STRING_AGG
+                DB::raw('GROUP_CONCAT(DISTINCT size_quantities.color_name ORDER BY size_quantities.color_name SEPARATOR ", ") as colors'),
+                DB::raw('SUM(size_quantities.quantity) as total_qty'),
+                DB::raw('MIN(size_quantities.created_at) as first_saved'),
+                DB::raw('MAX(size_quantities.updated_at) as last_saved')
             )
             ->when($search !== '', function ($q) use ($search) {
                 $q->where(function ($w) use ($search) {
-                    $w->where('ref_no', 'like', "%{$search}%")
-                      ->orWhere('skcl_no', 'like', "%{$search}%");
+                    $w->where('size_quantities.ref_no', 'like', "%{$search}%")
+                        ->orWhere('size_quantities.skcl_no', 'like', "%{$search}%")
+                        ->orWhere('tables.name', 'like', "%{$search}%");
                 });
             })
-            ->groupBy('ref_no', 'skcl_no', 'file_no', 'order_no', 'style_no')
+            ->groupBy(
+                'size_quantities.ref_no',
+                'size_quantities.skcl_no',
+                'size_quantities.file_no',
+                'size_quantities.order_no',
+                'size_quantities.style_no'
+            )
             ->orderByDesc('first_saved')   // নতুন আগে
-            ->orderByDesc('ref_no')
+            ->orderByDesc('size_quantities.ref_no')
             ->paginate(15)
             ->withQueryString()
-            ->through(fn ($r) => [
+            ->through(fn($r) => [
                 'ref_no'     => $r->ref_no,
                 'skcl_no'    => $r->skcl_no,
                 'file_no'    => $r->file_no,
                 'order_no'   => $r->order_no,
                 'style_no'   => $r->style_no,
+                'table_name' => $r->table_name,
+                'fixed_qty'  => $r->fixed_qty !== null ? (int) $r->fixed_qty : null,
                 'colors'     => $r->colors,
                 'total_qty'  => (int) $r->total_qty,
                 'created_at' => Carbon::parse($r->first_saved)->format('d M Y H:i'),
@@ -76,6 +90,7 @@ class SizeQuantityController extends Controller
         $base = [
             'skclNo'    => $skclNo,
             'colorName' => $colorName,
+            'tables'    => $this->tableOptions(),
             'colors'    => [],
             'found'     => null,
             'meta'      => null,
@@ -102,12 +117,11 @@ class SizeQuantityController extends Controller
         }
 
         $sizes = $this->sizesFrom($source);
-        $first = $source->first();
 
         return Inertia::render('size-quantities/create', [
             ...$base,
             'found' => true,
-            'meta'  => $this->metaFrom($first),
+            'meta'  => $this->metaFrom($source->first()),
             'sizes' => $sizes,
             'rows'  => $this->buildRows($source, $sizes, collect()),
         ]);
@@ -143,25 +157,29 @@ class SizeQuantityController extends Controller
 
         // শুধু এই ref-এ থাকা country/item/color সারিগুলো দেখাবে
         $groups = $saved
-            ->map(fn ($r) => $this->groupKey($r->country, $r->item_name, $r->color_name))
+            ->map(fn($r) => $this->groupKey($r->country, $r->item_name, $r->color_name))
             ->unique()
             ->all();
 
         $source = PoSheet::where('skcl_no', $skclNo)->get()
-            ->filter(fn ($r) => in_array($this->groupKey($r->country, $r->item_name, $r->color_name), $groups, true))
+            ->filter(fn($r) => in_array($this->groupKey($r->country, $r->item_name, $r->color_name), $groups, true))
             ->values();
 
         abort_if($source->isEmpty(), 404);
 
-        $savedByKey = $saved->keyBy(fn ($r) => $this->key($r->country, $r->item_name, $r->color_name, $r->size));
+        $savedByKey = $saved->keyBy(fn($r) => $this->key($r->country, $r->item_name, $r->color_name, $r->size));
         $sizes      = $this->sizesFrom($source);
+        $firstSaved = $saved->first();
 
         return Inertia::render('size-quantities/edit', [
-            'refNo'  => $ref,
-            'skclNo' => $skclNo,
-            'meta'   => $this->metaFrom($source->first()),
-            'sizes'  => $sizes,
-            'rows'   => $this->buildRows($source, $sizes, $savedByKey),
+            'refNo'     => $ref,
+            'skclNo'    => $skclNo,
+            'tableNoId' => $firstSaved->table_no_id,
+            'fixedQty'  => $firstSaved->fixed_qty !== null ? (string) $firstSaved->fixed_qty : '',
+            'tables'    => $this->tableOptions(),
+            'meta'      => $this->metaFrom($source->first()),
+            'sizes'     => $sizes,
+            'rows'      => $this->buildRows($source, $sizes, $savedByKey),
         ]);
     }
 
@@ -180,7 +198,7 @@ class SizeQuantityController extends Controller
 
         $source = $this->sourceFor($data['skcl_no']);
 
-        DB::transaction(fn () => $this->writeCells($ref, $data, $source));
+        DB::transaction(fn() => $this->writeCells($ref, $data, $source));
 
         return redirect()->route('size-quantities.index', ['highlight' => $ref]);
     }
@@ -192,19 +210,29 @@ class SizeQuantityController extends Controller
     {
         return $request->validate([
             'skcl_no'             => ['required', 'string'],
+            'table_no_id'         => ['required', 'integer', 'exists:tables,id'],
+            'fixed_qty'           => ['nullable', 'integer', 'min:0'],
             'rows'                => ['required', 'array', 'min:1'],
             'rows.*.country'      => ['required', 'string'],
             'rows.*.item_name'    => ['required', 'string'],
             'rows.*.color_name'   => ['required', 'string'],
             'rows.*.quantities'   => ['required', 'array'],
             'rows.*.quantities.*' => ['nullable', 'integer', 'min:0'],
+        ], [
+            'table_no_id.required' => 'Table সিলেক্ট করুন।',
+            'table_no_id.exists'   => 'সঠিক Table সিলেক্ট করুন।',
         ]);
+    }
+
+    private function tableOptions(): array
+    {
+        return Table::orderBy('name')->get(['id', 'name'])->all();
     }
 
     private function sourceFor(string $skclNo): Collection
     {
         $source = PoSheet::where('skcl_no', $skclNo)->get()
-            ->keyBy(fn ($r) => $this->key($r->country, $r->item_name, $r->color_name, $r->size));
+            ->keyBy(fn($r) => $this->key($r->country, $r->item_name, $r->color_name, $r->size));
 
         abort_if($source->isEmpty(), 422, 'SKCL No পাওয়া যায়নি।');
 
@@ -232,7 +260,7 @@ class SizeQuantityController extends Controller
     private function buildRows(Collection $source, array $sizes, Collection $saved): array
     {
         return $source
-            ->groupBy(fn ($r) => $this->groupKey($r->country, $r->item_name, $r->color_name))
+            ->groupBy(fn($r) => $this->groupKey($r->country, $r->item_name, $r->color_name))
             ->map(function ($group) use ($sizes, $saved) {
                 $first = $group->first();
 
@@ -252,9 +280,14 @@ class SizeQuantityController extends Controller
             })->values()->all();
     }
 
+    /**
+     * একটি ref-এর ঘরগুলো লেখে। ফাঁকা ঘর থাকলে ওই ref থেকে রো মুছে যায়।
+     */
     private function writeCells(string $ref, array $data, Collection $source): void
     {
-        $written = 0;
+        $written  = 0;
+        $tableId  = (int) $data['table_no_id'];
+        $fixedQty = ($data['fixed_qty'] ?? null) === null ? null : (int) $data['fixed_qty'];
 
         foreach ($data['rows'] as $row) {
             foreach ($row['quantities'] as $size => $qty) {
@@ -278,10 +311,12 @@ class SizeQuantityController extends Controller
                 }
 
                 SizeQuantity::updateOrCreate($match, [
-                    'file_no'  => $src->file_no,
-                    'order_no' => $src->order_no,
-                    'style_no' => $src->style_no,
-                    'quantity' => (int) $qty,
+                    'table_no_id' => $tableId,
+                    'fixed_qty'   => $fixedQty,
+                    'file_no'     => $src->file_no,
+                    'order_no'    => $src->order_no,
+                    'style_no'    => $src->style_no,
+                    'quantity'    => (int) $qty,
                 ]);
                 $written++;
             }

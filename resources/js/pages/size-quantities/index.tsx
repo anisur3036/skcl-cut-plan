@@ -1,445 +1,157 @@
-import { type FormEvent, useEffect, useState } from 'react';
-import { Head, router, useForm } from '@inertiajs/react';
+import { type FormEvent, useState } from 'react';
+import { Head, Link, router } from '@inertiajs/react';
 
 import SizeQuantityController from '@/actions/App/Http/Controllers/SizeQuantityController';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableHeader,
+    TableRow,
 } from '@/components/ui/table';
-
-type Quantities = Record<string, string>;
-
-type PivotRow = {
-  country: string;
-  item_name: string;
-  color_name: string;
-  available: string[];
-  quantities: Quantities;
-};
-
-type Meta = { file_no: string; order_no: string; style_no: string };
-
-type RefItem = {
-  ref_no: string;
-  total_qty: number;
-  created_at: string;
-  updated_at: string;
-};
+import type { Paginated, RefListItem } from '@/types/size-quantity';
 
 type PageProps = {
-  skclNo: string;
-  colorName: string;
-  refNo: string;
-  colors: string[];
-  refs: RefItem[];
-  found: boolean | null;
-  meta: Meta | null;
-  sizes: string[];
-  rows: PivotRow[];
+    refs: Paginated<RefListItem>;
+    search: string;
+    highlight: string;
 };
 
-type FormShape = { skcl_no: string; rows: PivotRow[] };
+export default function Index({ refs, search, highlight }: PageProps) {
+    const [term, setTerm] = useState<string>(search ?? '');
 
-const toNum = (v: string | undefined): number => parseInt(v ?? '', 10) || 0;
-const digitsOnly = (v: string) => v === '' || /^\d+$/.test(v);
-
-/**
- * Recalculate quantity = fixed × ratio.
- * If onlySize is given, only that size column is updated.
- */
-function recalc(
-  rows: PivotRow[],
-  fixed: number,
-  ratios: Record<string, string>,
-  onlySize?: string,
-): PivotRow[] {
-  return rows.map((r) => {
-    const quantities = { ...r.quantities };
-    r.available.forEach((s) => {
-      if (onlySize && s !== onlySize) return;
-      quantities[s] = String(fixed * toNum(ratios[s]));
-    });
-    return { ...r, quantities };
-  });
-}
-
-export default function Index({
-  skclNo,
-  colorName,
-  refNo,
-  colors,
-  refs,
-  found,
-  meta,
-  sizes,
-  rows,
-}: PageProps) {
-  const [search, setSearch] = useState<string>(skclNo ?? '');
-  const [color, setColor] = useState<string>(colorName ?? '');
-  const [saved, setSaved] = useState<boolean>(false);
-
-  // Helpers (not saved): fixed qty and ratio per size
-  const [fixedQty, setFixedQty] = useState<string>('');
-  const [ratios, setRatios] = useState<Record<string, string>>({});
-
-  const { data, setData, post, put, processing, errors } = useForm<FormShape>({
-    skcl_no: skclNo ?? '',
-    rows: rows ?? [],
-  });
-
-  const isEdit = refNo !== '';
-
-  useEffect(() => {
-    setData({ skcl_no: skclNo ?? '', rows: rows ?? [] });
-    setRatios(Object.fromEntries(sizes.map((s) => [s, '1'])));
-    setFixedQty('');
-    setSearch(skclNo ?? '');
-    setColor(colorName ?? '');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [skclNo, colorName, refNo, rows]);
-
-  // Search always opens a fresh blank form (no ref_no sent)
-  const handleSearch = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setSaved(false);
-    router.get(
-      SizeQuantityController.index.url(),
-      { skcl_no: search.trim(), color_name: color.trim() },
-      { preserveState: true },
-    );
-  };
-
-  // Load a saved ref for editing
-  const openRef = (ref: string) => {
-    setSaved(false);
-    router.get(
-      SizeQuantityController.index.url(),
-      { skcl_no: skclNo, color_name: colorName, ref_no: ref },
-      { preserveState: true },
-    );
-  };
-
-  // Open a fresh form for the same SKCL / color
-  const newEntry = () => {
-    setSaved(false);
-    router.get(
-      SizeQuantityController.index.url(),
-      { skcl_no: skclNo, color_name: colorName },
-      { preserveState: true },
-    );
-  };
-
-  const setQty = (rowIdx: number, size: string, value: string) => {
-    if (!digitsOnly(value)) return;
-    setData(
-      'rows',
-      data.rows.map((r, i) =>
-        i === rowIdx ? { ...r, quantities: { ...r.quantities, [size]: value } } : r,
-      ),
-    );
-  };
-
-  // Ratio change -> update that size column live
-  const handleRatioChange = (size: string, value: string) => {
-    if (!digitsOnly(value)) return;
-    const next = { ...ratios, [size]: value };
-    setRatios(next);
-    if (fixedQty !== '') {
-      setData('rows', recalc(data.rows, toNum(fixedQty), next, size));
-    }
-  };
-
-  // Fixed qty change -> update every size live
-  const handleFixedChange = (value: string) => {
-    if (!digitsOnly(value)) return;
-    setFixedQty(value);
-    if (value === '') return;
-    setData('rows', recalc(data.rows, toNum(value), ratios));
-  };
-
-  // Per-row apply (re-applies current fixed × ratio to one row)
-  const applyToRow = (idx: number) => {
-    if (fixedQty === '') return;
-    const fixed = toNum(fixedQty);
-    setData(
-      'rows',
-      data.rows.map((r, i) => (i === idx ? recalc([r], fixed, ratios)[0] : r)),
-    );
-  };
-
-  const handleSave = (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const options = {
-      preserveScroll: true,
-      onSuccess: () => setSaved(true),
+    const handleSearch = (e: FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        router.get(
+            SizeQuantityController.index.url(),
+            { search: term.trim() },
+            { preserveState: true },
+        );
     };
 
-    if (isEdit) {
-      put(SizeQuantityController.update.url({ ref: refNo }), options);
-    } else {
-      post(SizeQuantityController.store.url(), options);
-    }
-  };
+    const goTo = (url: string | null) => {
+        if (url) router.get(url, {}, { preserveScroll: true });
+    };
 
-  const rowTotal = (r: PivotRow): number =>
-    sizes.reduce((sum, sz) => sum + toNum(r.quantities[sz]), 0);
-  const colTotal = (sz: string): number =>
-    data.rows.reduce((sum, r) => sum + toNum(r.quantities[sz]), 0);
-  const grandTotal = data.rows.reduce((sum, r) => sum + rowTotal(r), 0);
+    return (
+        <>
+            <Head title="Size Quantity List" />
+            <div className="mx-auto max-w-6xl space-y-6 p-6">
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between gap-3">
+                        <CardTitle>Size Quantity References</CardTitle>
+                        <Button asChild>
+                            <Link href={SizeQuantityController.create.url()}>New Entry</Link>
+                        </Button>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {highlight && (
+                            <p className="text-sm text-green-600">Saved ✔ Ref: {highlight}</p>
+                        )}
 
-  return (
-    <>
-      <Head title="Size Quantity Entry" />
-      <div className="mx-auto max-w-6xl space-y-6 p-6">
-        {/* Search: SKCL No + Color */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Size wise Quantity Entry</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSearch} className="flex flex-wrap items-end gap-3">
-              <div className="grid gap-2">
-                <Label htmlFor="skcl_no">SKCL No</Label>
-                <Input
-                  id="skcl_no"
-                  placeholder="e.g. 22222/1"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="w-56"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="color_name">Color (optional)</Label>
-                <Input
-                  id="color_name"
-                  list="color-options"
-                  placeholder="e.g. White"
-                  value={color}
-                  onChange={(e) => setColor(e.target.value)}
-                  className="w-48"
-                />
-                <datalist id="color-options">
-                  {colors.map((c) => (
-                    <option key={c} value={c} />
-                  ))}
-                </datalist>
-              </div>
-              <Button type="submit">Search</Button>
-            </form>
-            {found === false && (
-              <p className="mt-3 text-sm text-destructive">
-                No data found for this SKCL No / Color.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Saved refs for this SKCL */}
-        {found && refs.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Saved Refs for {skclNo}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Ref No</TableHead>
-                      <TableHead className="text-right">Total Qty</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Last Updated</TableHead>
-                      <TableHead />
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {refs.map((r) => (
-                      <TableRow
-                        key={r.ref_no}
-                        className={r.ref_no === refNo ? 'bg-muted/60' : ''}
-                      >
-                        <TableCell className="font-medium">{r.ref_no}</TableCell>
-                        <TableCell className="text-right">{r.total_qty}</TableCell>
-                        <TableCell>{r.created_at}</TableCell>
-                        <TableCell>{r.updated_at}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            disabled={r.ref_no === refNo}
-                            onClick={() => openRef(r.ref_no)}
-                          >
-                            {r.ref_no === refNo ? 'Editing' : 'Edit'}
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {found && meta && (
-          <form onSubmit={handleSave}>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-3">
-                <CardTitle className="text-base">
-                  SKCL: {skclNo} | File: {meta.file_no} | Order: {meta.order_no} |
-                  Style: {meta.style_no}
-                  {colorName && ` | Color: ${colorName}`}
-                  {' | '}
-                  {isEdit ? `Editing Ref: ${refNo}` : 'New Entry'}
-                </CardTitle>
-                {isEdit && (
-                  <Button type="button" variant="outline" size="sm" onClick={newEntry}>
-                    New Entry
-                  </Button>
-                )}
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Fixed qty toolbar */}
-                <div className="flex flex-wrap items-end gap-3 rounded-md border bg-muted/40 p-3">
-                  <div className="grid gap-2">
-                    <Label htmlFor="fixed_qty">Fixed Qty (× ratio)</Label>
-                    <Input
-                      id="fixed_qty"
-                      inputMode="numeric"
-                      placeholder="e.g. 40"
-                      className="w-32"
-                      value={fixedQty}
-                      onChange={(e) => handleFixedChange(e.target.value)}
-                    />
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    Quantity = Fixed Qty × Ratio (live update, e.g. 40 × 3 = 120)
-                  </p>
-                </div>
-
-                <div className="overflow-x-auto rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Country</TableHead>
-                        <TableHead>Item</TableHead>
-                        <TableHead>Color</TableHead>
-                        {sizes.map((sz) => (
-                          <TableHead key={sz} className="text-center">
-                            {sz}
-                          </TableHead>
-                        ))}
-                        <TableHead className="text-right">Total</TableHead>
-                        <TableHead />
-                      </TableRow>
-                      {/* Ratio row */}
-                      <TableRow className="bg-muted/40">
-                        <TableHead colSpan={3} className="text-right">
-                          Ratio
-                        </TableHead>
-                        {sizes.map((sz) => (
-                          <TableHead key={sz} className="p-1">
+                        <form onSubmit={handleSearch} className="flex gap-2">
                             <Input
-                              inputMode="numeric"
-                              className="w-20 text-center"
-                              value={ratios[sz] ?? ''}
-                              onChange={(e) =>
-                                handleRatioChange(sz, e.target.value)
-                              }
+                                placeholder="Search by Ref No or SKCL No"
+                                value={term}
+                                onChange={(e) => setTerm(e.target.value)}
+                                className="w-72"
                             />
-                          </TableHead>
-                        ))}
-                        <TableHead colSpan={2} />
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.rows.map((r, idx) => (
-                        <TableRow key={`${r.country}-${r.item_name}-${r.color_name}`}>
-                          <TableCell>{r.country}</TableCell>
-                          <TableCell>{r.item_name}</TableCell>
-                          <TableCell>{r.color_name}</TableCell>
-                          {sizes.map((sz) => (
-                            <TableCell key={sz} className="p-1">
-                              <Input
-                                inputMode="numeric"
-                                className="w-20 text-center"
-                                value={r.quantities[sz] ?? ''}
-                                disabled={!r.available.includes(sz)}
-                                onChange={(e) => setQty(idx, sz, e.target.value)}
-                              />
-                            </TableCell>
-                          ))}
-                          <TableCell className="text-right font-medium">
-                            {rowTotal(r)}
-                          </TableCell>
-                          <TableCell className="p-1">
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="outline"
-                              onClick={() => applyToRow(idx)}
-                            >
-                              Apply
+                            <Button type="submit" variant="secondary">
+                                Search
                             </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                    <TableFooter>
-                      <TableRow>
-                        <TableCell colSpan={3} className="font-semibold">
-                          Total
-                        </TableCell>
-                        {sizes.map((sz) => (
-                          <TableCell key={sz} className="text-center font-semibold">
-                            {colTotal(sz)}
-                          </TableCell>
-                        ))}
-                        <TableCell className="text-right font-bold">{grandTotal}</TableCell>
-                        <TableCell />
-                      </TableRow>
-                    </TableFooter>
-                  </Table>
-                </div>
+                        </form>
 
-                {errors.rows && (
-                  <p className="text-sm text-destructive">{errors.rows}</p>
-                )}
-                {!errors.rows && Object.keys(errors).length > 0 && (
-                  <p className="text-sm text-destructive">
-                    There are errors in the input. Please check the numbers.
-                  </p>
-                )}
+                        <div className="overflow-x-auto rounded-md border">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Ref No</TableHead>
+                                        <TableHead>SKCL No</TableHead>
+                                        <TableHead>File</TableHead>
+                                        <TableHead>Order</TableHead>
+                                        <TableHead>Style</TableHead>
+                                        <TableHead>Colors</TableHead>
+                                        <TableHead className="text-right">Total Qty</TableHead>
+                                        <TableHead>Created</TableHead>
+                                        <TableHead>Updated</TableHead>
+                                        <TableHead />
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {refs.data.length === 0 && (
+                                        <TableRow>
+                                            <TableCell
+                                                colSpan={10}
+                                                className="py-6 text-center text-muted-foreground"
+                                            >
+                                                No references found.
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                    {refs.data.map((r) => (
+                                        <TableRow
+                                            key={`${r.ref_no}-${r.skcl_no}`}
+                                            className={r.ref_no === highlight ? 'bg-muted/60' : ''}
+                                        >
+                                            <TableCell className="font-medium">{r.ref_no}</TableCell>
+                                            <TableCell>{r.skcl_no}</TableCell>
+                                            <TableCell>{r.file_no}</TableCell>
+                                            <TableCell>{r.order_no}</TableCell>
+                                            <TableCell>{r.style_no}</TableCell>
+                                            <TableCell>{r.colors}</TableCell>
+                                            <TableCell className="text-right">{r.total_qty}</TableCell>
+                                            <TableCell>{r.created_at}</TableCell>
+                                            <TableCell>{r.updated_at}</TableCell>
+                                            <TableCell className="text-right">
+                                                <Button asChild size="sm" variant="outline">
+                                                    <Link
+                                                        href={SizeQuantityController.edit.url(
+                                                            { ref: r.ref_no },
+                                                            { query: { skcl_no: r.skcl_no } },
+                                                        )}
+                                                    >
+                                                        Edit
+                                                    </Link>
+                                                </Button>
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </div>
 
-                <div className="flex items-center gap-3">
-                  <Button type="submit" disabled={processing}>
-                    {processing
-                      ? 'Saving...'
-                      : isEdit
-                        ? 'Update'
-                        : 'Save as new Ref'}
-                  </Button>
-                  {saved && isEdit && (
-                    <span className="text-sm text-green-600">
-                      Saved ✔ Ref: {refNo}
-                    </span>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-          </form>
-        )}
-      </div>
-    </>
-  );
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">
+                                Page {refs.current_page} of {refs.last_page} · {refs.total} total
+                            </span>
+                            <div className="flex gap-2">
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!refs.prev_page_url}
+                                    onClick={() => goTo(refs.prev_page_url)}
+                                >
+                                    Previous
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    disabled={!refs.next_page_url}
+                                    onClick={() => goTo(refs.next_page_url)}
+                                >
+                                    Next
+                                </Button>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+            </div>
+        </>
+    );
 }

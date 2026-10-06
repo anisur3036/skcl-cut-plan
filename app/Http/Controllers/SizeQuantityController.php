@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\PoSheet;
 use App\Models\SizeQuantity;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -14,18 +15,68 @@ class SizeQuantityController extends Controller
 {
     private const SIZE_ORDER = ['XXS', 'XS', 'S', 'M', 'L', 'XL', 'XXL', '2XL', '3XL', '4XL'];
 
+    /* ------------------------------------------------------------------ */
+    /*  LIST: ref অনুযায়ী তালিকা, DESC                                    */
+    /* ------------------------------------------------------------------ */
     public function index(Request $request)
+    {
+        $search    = trim((string) $request->query('search', ''));
+        $highlight = trim((string) $request->query('highlight', ''));
+
+        $refs = SizeQuantity::query()
+            ->select(
+                'ref_no',
+                'skcl_no',
+                'file_no',
+                'order_no',
+                'style_no',
+                DB::raw('GROUP_CONCAT(DISTINCT color_name ORDER BY color_name SEPARATOR ", ") as colors'),
+                DB::raw('SUM(quantity) as total_qty'),
+                DB::raw('MIN(created_at) as first_saved'),
+                DB::raw('MAX(updated_at) as last_saved')
+            )
+            ->when($search !== '', function ($q) use ($search) {
+                $q->where(function ($w) use ($search) {
+                    $w->where('ref_no', 'like', "%{$search}%")
+                      ->orWhere('skcl_no', 'like', "%{$search}%");
+                });
+            })
+            ->groupBy('ref_no', 'skcl_no', 'file_no', 'order_no', 'style_no')
+            ->orderByDesc('first_saved')   // নতুন আগে
+            ->orderByDesc('ref_no')
+            ->paginate(15)
+            ->withQueryString()
+            ->through(fn ($r) => [
+                'ref_no'     => $r->ref_no,
+                'skcl_no'    => $r->skcl_no,
+                'file_no'    => $r->file_no,
+                'order_no'   => $r->order_no,
+                'style_no'   => $r->style_no,
+                'colors'     => $r->colors,
+                'total_qty'  => (int) $r->total_qty,
+                'created_at' => Carbon::parse($r->first_saved)->format('d M Y H:i'),
+                'updated_at' => Carbon::parse($r->last_saved)->format('d M Y H:i'),
+            ]);
+
+        return Inertia::render('size-quantities/index', [
+            'refs'      => $refs,
+            'search'    => $search,
+            'highlight' => $highlight,
+        ]);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  CREATE: সার্চ + ফাঁকা ফর্ম                                         */
+    /* ------------------------------------------------------------------ */
+    public function create(Request $request)
     {
         $skclNo    = trim((string) $request->query('skcl_no', ''));
         $colorName = trim((string) $request->query('color_name', ''));
-        $refNo     = trim((string) $request->query('ref_no', ''));
 
         $base = [
             'skclNo'    => $skclNo,
             'colorName' => $colorName,
-            'refNo'     => '',
             'colors'    => [],
-            'refs'      => [],
             'found'     => null,
             'meta'      => null,
             'sizes'     => [],
@@ -33,13 +84,12 @@ class SizeQuantityController extends Controller
         ];
 
         if ($skclNo === '') {
-            return Inertia::render('size-quantities/index', $base);
+            return Inertia::render('size-quantities/create', $base);
         }
 
         $query = PoSheet::where('skcl_no', $skclNo);
 
         $base['colors'] = (clone $query)->distinct()->orderBy('color_name')->pluck('color_name')->all();
-        $base['refs']   = $this->refsFor($skclNo);
 
         if ($colorName !== '') {
             $query->where('color_name', $colorName);
@@ -48,60 +98,24 @@ class SizeQuantityController extends Controller
         $source = $query->get();
 
         if ($source->isEmpty()) {
-            return Inertia::render('size-quantities/index', [...$base, 'found' => false]);
+            return Inertia::render('size-quantities/create', [...$base, 'found' => false]);
         }
 
-        // ref_no দেওয়া থাকলে সেই ref-এর quantity, না থাকলে ফাঁকা ফর্ম
-        $saved = collect();
-        if ($refNo !== '') {
-            $saved = SizeQuantity::where('skcl_no', $skclNo)->where('ref_no', $refNo)->get();
-            abort_if($saved->isEmpty(), 404, 'Ref পাওয়া যায়নি।');
-            $saved = $saved->keyBy(fn ($r) => $this->key($r->country, $r->item_name, $r->color_name, $r->size));
-        }
-
-        $sizes = $source->pluck('size')->unique()->values()
-            ->sortBy(function ($s) {
-                $i = array_search(strtoupper($s), self::SIZE_ORDER, true);
-                return $i === false ? 999 : $i;
-            })->values()->all();
-
-        $rows = $source
-            ->groupBy(fn ($r) => $r->country . '|' . $r->item_name . '|' . $r->color_name)
-            ->map(function ($group) use ($sizes, $saved) {
-                $first = $group->first();
-
-                $quantities = [];
-                foreach ($sizes as $size) {
-                    $s = $saved->get($this->key($first->country, $first->item_name, $first->color_name, $size));
-                    $quantities[$size] = $s ? (string) $s->quantity : '';
-                }
-
-                return [
-                    'country'    => $first->country,
-                    'item_name'  => $first->item_name,
-                    'color_name' => $first->color_name,
-                    'available'  => $group->pluck('size')->all(),
-                    'quantities' => $quantities,
-                ];
-            })->values()->all();
-
+        $sizes = $this->sizesFrom($source);
         $first = $source->first();
 
-        return Inertia::render('size-quantities/index', [
+        return Inertia::render('size-quantities/create', [
             ...$base,
-            'refNo' => $refNo,
             'found' => true,
-            'meta'  => [
-                'file_no'  => $first->file_no,
-                'order_no' => $first->order_no,
-                'style_no' => $first->style_no,
-            ],
+            'meta'  => $this->metaFrom($first),
             'sizes' => $sizes,
-            'rows'  => $rows,
+            'rows'  => $this->buildRows($source, $sizes, collect()),
         ]);
     }
 
-    // প্রতি Save-এ নতুন ref
+    /* ------------------------------------------------------------------ */
+    /*  STORE: প্রতি Save-এ নতুন ref                                       */
+    /* ------------------------------------------------------------------ */
     public function store(Request $request)
     {
         $data   = $this->validated($request);
@@ -113,13 +127,47 @@ class SizeQuantityController extends Controller
             return $ref;
         });
 
-        return redirect()->route('size-quantities.index', [
-            'skcl_no' => $data['skcl_no'],
-            'ref_no'  => $refNo,
+        return redirect()->route('size-quantities.index', ['highlight' => $refNo]);
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  EDIT: একটি ref-এর ডাটা লোড                                         */
+    /* ------------------------------------------------------------------ */
+    public function edit(Request $request, string $ref)
+    {
+        $skclNo = trim((string) $request->query('skcl_no', ''));
+        abort_if($skclNo === '', 404);
+
+        $saved = SizeQuantity::where('ref_no', $ref)->where('skcl_no', $skclNo)->get();
+        abort_if($saved->isEmpty(), 404, 'Ref পাওয়া যায়নি।');
+
+        // শুধু এই ref-এ থাকা country/item/color সারিগুলো দেখাবে
+        $groups = $saved
+            ->map(fn ($r) => $this->groupKey($r->country, $r->item_name, $r->color_name))
+            ->unique()
+            ->all();
+
+        $source = PoSheet::where('skcl_no', $skclNo)->get()
+            ->filter(fn ($r) => in_array($this->groupKey($r->country, $r->item_name, $r->color_name), $groups, true))
+            ->values();
+
+        abort_if($source->isEmpty(), 404);
+
+        $savedByKey = $saved->keyBy(fn ($r) => $this->key($r->country, $r->item_name, $r->color_name, $r->size));
+        $sizes      = $this->sizesFrom($source);
+
+        return Inertia::render('size-quantities/edit', [
+            'refNo'  => $ref,
+            'skclNo' => $skclNo,
+            'meta'   => $this->metaFrom($source->first()),
+            'sizes'  => $sizes,
+            'rows'   => $this->buildRows($source, $sizes, $savedByKey),
         ]);
     }
 
-    // বিদ্যমান ref আপডেট
+    /* ------------------------------------------------------------------ */
+    /*  UPDATE                                                              */
+    /* ------------------------------------------------------------------ */
     public function update(Request $request, string $ref)
     {
         $data = $this->validated($request);
@@ -134,12 +182,12 @@ class SizeQuantityController extends Controller
 
         DB::transaction(fn () => $this->writeCells($ref, $data, $source));
 
-        return redirect()->route('size-quantities.index', [
-            'skcl_no' => $data['skcl_no'],
-            'ref_no'  => $ref,
-        ]);
+        return redirect()->route('size-quantities.index', ['highlight' => $ref]);
     }
 
+    /* ------------------------------------------------------------------ */
+    /*  Helpers                                                             */
+    /* ------------------------------------------------------------------ */
     private function validated(Request $request): array
     {
         return $request->validate([
@@ -163,9 +211,47 @@ class SizeQuantityController extends Controller
         return $source;
     }
 
-    /**
-     * একটি ref-এর ঘরগুলো লেখে। ফাঁকা ঘর থাকলে ওই ref থেকে রো মুছে যায়।
-     */
+    private function sizesFrom(Collection $source): array
+    {
+        return $source->pluck('size')->unique()->values()
+            ->sortBy(function ($s) {
+                $i = array_search(strtoupper($s), self::SIZE_ORDER, true);
+                return $i === false ? 999 : $i;
+            })->values()->all();
+    }
+
+    private function metaFrom($first): array
+    {
+        return [
+            'file_no'  => $first->file_no,
+            'order_no' => $first->order_no,
+            'style_no' => $first->style_no,
+        ];
+    }
+
+    private function buildRows(Collection $source, array $sizes, Collection $saved): array
+    {
+        return $source
+            ->groupBy(fn ($r) => $this->groupKey($r->country, $r->item_name, $r->color_name))
+            ->map(function ($group) use ($sizes, $saved) {
+                $first = $group->first();
+
+                $quantities = [];
+                foreach ($sizes as $size) {
+                    $s = $saved->get($this->key($first->country, $first->item_name, $first->color_name, $size));
+                    $quantities[$size] = $s ? (string) $s->quantity : '';
+                }
+
+                return [
+                    'country'    => $first->country,
+                    'item_name'  => $first->item_name,
+                    'color_name' => $first->color_name,
+                    'available'  => $group->pluck('size')->all(),
+                    'quantities' => $quantities,
+                ];
+            })->values()->all();
+    }
+
     private function writeCells(string $ref, array $data, Collection $source): void
     {
         $written = 0;
@@ -222,25 +308,9 @@ class SizeQuantityController extends Controller
         return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
-    private function refsFor(string $skclNo): array
+    private function groupKey(string $country, string $item, string $color): string
     {
-        return SizeQuantity::where('skcl_no', $skclNo)
-            ->select(
-                'ref_no',
-                DB::raw('SUM(quantity) as total_qty'),
-                DB::raw('MIN(created_at) as first_saved'),
-                DB::raw('MAX(updated_at) as last_saved')
-            )
-            ->groupBy('ref_no')
-            ->orderByDesc('first_saved')
-            ->get()
-            ->map(fn ($r) => [
-                'ref_no'     => $r->ref_no,
-                'total_qty'  => (int) $r->total_qty,
-                'created_at' => \Carbon\Carbon::parse($r->first_saved)->format('d M Y H:i'),
-                'updated_at' => \Carbon\Carbon::parse($r->last_saved)->format('d M Y H:i'),
-            ])
-            ->all();
+        return implode('|', [$country, $item, $color]);
     }
 
     private function key(string $country, string $item, string $color, string $size): string

@@ -43,6 +43,26 @@ type FormShape = { skcl_no: string; rows: PivotRow[] };
 const toNum = (v: string | undefined): number => parseInt(v ?? '', 10) || 0;
 const digitsOnly = (v: string) => v === '' || /^\d+$/.test(v);
 
+/**
+ * Recalculate quantity = fixed × ratio.
+ * If onlySize is given, only that size column is updated.
+ */
+function recalc(
+  rows: PivotRow[],
+  fixed: number,
+  ratios: Record<string, string>,
+  onlySize?: string,
+): PivotRow[] {
+  return rows.map((r) => {
+    const quantities = { ...r.quantities };
+    r.available.forEach((s) => {
+      if (onlySize && s !== onlySize) return;
+      quantities[s] = String(fixed * toNum(ratios[s]));
+    });
+    return { ...r, quantities };
+  });
+}
+
 export default function Index({ skclNo, colorName, colors, found, meta, sizes, rows }: PageProps) {
   const [search, setSearch] = useState<string>(skclNo ?? '');
   const [color, setColor] = useState<string>(colorName ?? '');
@@ -85,25 +105,32 @@ export default function Index({ skclNo, colorName, colors, found, meta, sizes, r
     );
   };
 
-  // quantity = fixedQty × ratio (for every valid size)
-  const fillRow = (r: PivotRow, fixed: number): PivotRow => {
-    const quantities = { ...r.quantities };
-    r.available.forEach((s) => {
-      quantities[s] = String(fixed * toNum(ratios[s]));
-    });
-    return { ...r, quantities };
+  // Ratio change -> update that size column live
+  const handleRatioChange = (size: string, value: string) => {
+    if (!digitsOnly(value)) return;
+    const next = { ...ratios, [size]: value };
+    setRatios(next);
+    if (fixedQty !== '') {
+      setData('rows', recalc(data.rows, toNum(fixedQty), next, size));
+    }
   };
 
-  const applyToAll = () => {
-    if (fixedQty === '') return;
-    const fixed = toNum(fixedQty);
-    setData('rows', data.rows.map((r) => fillRow(r, fixed)));
+  // Fixed qty change -> update every size live
+  const handleFixedChange = (value: string) => {
+    if (!digitsOnly(value)) return;
+    setFixedQty(value);
+    if (value === '') return;
+    setData('rows', recalc(data.rows, toNum(value), ratios));
   };
 
+  // Per-row apply (re-applies current fixed × ratio to one row)
   const applyToRow = (idx: number) => {
     if (fixedQty === '') return;
     const fixed = toNum(fixedQty);
-    setData('rows', data.rows.map((r, i) => (i === idx ? fillRow(r, fixed) : r)));
+    setData(
+      'rows',
+      data.rows.map((r, i) => (i === idx ? recalc([r], fixed, ratios)[0] : r)),
+    );
   };
 
   const handleSave = (e: FormEvent<HTMLFormElement>) => {
@@ -188,16 +215,11 @@ export default function Index({ skclNo, colorName, colors, found, meta, sizes, r
                       placeholder="e.g. 40"
                       className="w-32"
                       value={fixedQty}
-                      onChange={(e) =>
-                        digitsOnly(e.target.value) && setFixedQty(e.target.value)
-                      }
+                      onChange={(e) => handleFixedChange(e.target.value)}
                     />
                   </div>
-                  <Button type="button" variant="secondary" onClick={applyToAll}>
-                    Apply to all rows
-                  </Button>
                   <p className="text-sm text-muted-foreground">
-                    Quantity = Fixed Qty × Ratio (e.g. 40 × 3 = 120)
+                    Quantity = Fixed Qty × Ratio (live update, e.g. 40 × 3 = 120)
                   </p>
                 </div>
 
@@ -228,8 +250,7 @@ export default function Index({ skclNo, colorName, colors, found, meta, sizes, r
                               className="w-20 text-center"
                               value={ratios[sz] ?? ''}
                               onChange={(e) =>
-                                digitsOnly(e.target.value) &&
-                                setRatios((p) => ({ ...p, [sz]: e.target.value }))
+                                handleRatioChange(sz, e.target.value)
                               }
                             />
                           </TableHead>

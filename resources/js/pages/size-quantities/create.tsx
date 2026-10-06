@@ -68,7 +68,7 @@ export default function Create({
   const handlePivotChange = (next: PivotChange) =>
     setData((d) => ({ ...d, rows: next.rows, fixed_qty: next.fixedQty }));
 
-  const handleSave = (e: FormEvent<HTMLFormElement>) => {
+  const handleSave = (e: React.SyntheticEvent) => {
     e.preventDefault();
     post(SizeQuantityController.store.url(), { preserveScroll: true });
   };
@@ -76,7 +76,7 @@ export default function Create({
   return (
     <>
       <Head title="New Size Quantity Entry" />
-      <div className="mx-auto max-w-6xl space-y-6 p-6">
+      <div className="mx-auto min-w-3xl max-w-7xl space-y-6 p-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle>New Size wise Quantity Entry</CardTitle>
@@ -133,20 +133,21 @@ export default function Create({
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <TableSelect
-                  tables={tables}
-                  value={data.table_no_id}
-                  onChange={(v) => setData('table_no_id', v)}
-                  error={errors.table_no_id}
-                />
-
                 <PivotForm
                   key={`${skclNo}|${colorName}`}
                   sizes={sizes}
                   rows={data.rows}
                   fixedQty={data.fixed_qty}
                   onChange={handlePivotChange}
-                />
+                >
+                  <TableSelect
+                    tables={tables}
+                    value={data.table_no_id}
+                    onChange={(v) => setData('table_no_id', v)}
+                    error={errors.table_no_id}
+                  />
+
+                </PivotForm>
 
                 {errors.rows && (
                   <p className="text-sm text-destructive">{errors.rows}</p>

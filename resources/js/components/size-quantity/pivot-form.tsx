@@ -1,5 +1,4 @@
-import { useState } from 'react';
-
+import { type ReactNode, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +13,7 @@ import {
 } from '@/components/ui/table';
 import { digitsOnly, recalc, toNum } from '@/lib/size-quantity';
 import type { PivotChange, PivotRow } from '@/types/size-quantity';
+import RemainingPo from '@/components/size-quantity/remaining-po';
 
 type Props = {
   sizes: string[];
@@ -21,12 +21,13 @@ type Props = {
   fixedQty: string;
   initialRatios?: Record<string, string>;
   onChange: (next: PivotChange) => void;
+  children?: ReactNode;
 };
 
-export default function PivotForm({ sizes, rows, fixedQty, initialRatios, onChange }: Props) {
+export default function PivotForm({ sizes, rows, fixedQty, initialRatios, onChange, children }: Props) {
   // Ratio সেভ হয় না, শুধু হিসাবের জন্য
   const [ratios, setRatios] = useState<Record<string, string>>(
-    () => initialRatios ?? Object.fromEntries(sizes.map((s) => [s, '1'])),
+    () => initialRatios ?? Object.fromEntries(sizes.map((s) => [s, ''])),
   );
 
   const setQty = (rowIdx: number, size: string, value: string) => {
@@ -73,9 +74,12 @@ export default function PivotForm({ sizes, rows, fixedQty, initialRatios, onChan
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3 rounded-md border bg-muted/40 p-3">
+      <RemainingPo sizes={sizes} rows={rows} />
+      <div className="flex flex-wrap items-start gap-4 rounded-md border bg-muted/40 p-3">
+        {children}
+
         <div className="grid gap-2">
-          <Label htmlFor="fixed_qty">Fixed Qty (× ratio)</Label>
+          <Label htmlFor="fixed_qty">Lay Quantity</Label>
           <Input
             id="fixed_qty"
             inputMode="numeric"
@@ -85,11 +89,11 @@ export default function PivotForm({ sizes, rows, fixedQty, initialRatios, onChan
             onChange={(e) => handleFixedChange(e.target.value)}
           />
         </div>
-        <p className="text-sm text-muted-foreground">
-          Quantity = Fixed Qty × Ratio (live update, e.g. 40 × 3 = 120)
+
+        <p className="self-end pb-2 text-sm text-muted-foreground">
+          Quantity = Lay Quantity × Ratio (live update, e.g. 40 × 3 = 120)
         </p>
       </div>
-
       <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>

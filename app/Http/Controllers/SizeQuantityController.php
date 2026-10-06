@@ -82,6 +82,7 @@ class SizeQuantityController extends Controller
     /* ------------------------------------------------------------------ */
     /*  CREATE: সার্চ + ফাঁকা ফর্ম                                         */
     /* ------------------------------------------------------------------ */
+
     public function create(Request $request)
     {
         $skclNo    = trim((string) $request->query('skcl_no', ''));
@@ -117,16 +118,16 @@ class SizeQuantityController extends Controller
         }
 
         $sizes = $this->sizesFrom($source);
+        $used  = $this->usedMap($skclNo); // আগের সব marker plan-এ ব্যবহৃত quantity
 
         return Inertia::render('size-quantities/create', [
             ...$base,
             'found' => true,
             'meta'  => $this->metaFrom($source->first()),
             'sizes' => $sizes,
-            'rows'  => $this->buildRows($source, $sizes, collect()),
+            'rows'  => $this->buildRows($source, $sizes, collect(), $used),
         ]);
     }
-
     /* ------------------------------------------------------------------ */
     /*  STORE: প্রতি Save-এ নতুন ref                                       */
     /* ------------------------------------------------------------------ */
@@ -155,7 +156,6 @@ class SizeQuantityController extends Controller
         $saved = SizeQuantity::where('ref_no', $ref)->where('skcl_no', $skclNo)->get();
         abort_if($saved->isEmpty(), 404, 'Ref পাওয়া যায়নি।');
 
-        // শুধু এই ref-এ থাকা country/item/color সারিগুলো দেখাবে
         $groups = $saved
             ->map(fn($r) => $this->groupKey($r->country, $r->item_name, $r->color_name))
             ->unique()
@@ -169,6 +169,7 @@ class SizeQuantityController extends Controller
 
         $savedByKey = $saved->keyBy(fn($r) => $this->key($r->country, $r->item_name, $r->color_name, $r->size));
         $sizes      = $this->sizesFrom($source);
+        $used       = $this->usedMap($skclNo, $ref); // এই ref বাদে বাকিগুলো
         $firstSaved = $saved->first();
 
         return Inertia::render('size-quantities/edit', [
@@ -179,10 +180,9 @@ class SizeQuantityController extends Controller
             'tables'    => $this->tableOptions(),
             'meta'      => $this->metaFrom($source->first()),
             'sizes'     => $sizes,
-            'rows'      => $this->buildRows($source, $sizes, $savedByKey),
+            'rows'      => $this->buildRows($source, $sizes, $savedByKey, $used),
         ]);
     }
-
     /* ------------------------------------------------------------------ */
     /*  UPDATE                                                              */
     /* ------------------------------------------------------------------ */
@@ -257,28 +257,57 @@ class SizeQuantityController extends Controller
         ];
     }
 
-    private function buildRows(Collection $source, array $sizes, Collection $saved): array
+    private function buildRows(Collection $source, array $sizes, Collection $saved, Collection $used): array
     {
         return $source
             ->groupBy(fn($r) => $this->groupKey($r->country, $r->item_name, $r->color_name))
-            ->map(function ($group) use ($sizes, $saved) {
+            ->map(function ($group) use ($sizes, $saved, $used) {
                 $first = $group->first();
 
+                // po_sheets-এর সাইজ ওয়াইজ PO quantity
+                $poBySize = $group->groupBy('size')
+                    ->map(fn($g) => (int) $g->sum(fn($r) => (int) $r->quantity));
+
                 $quantities = [];
+                $poQty      = [];
+                $usedQty    = [];
+
                 foreach ($sizes as $size) {
-                    $s = $saved->get($this->key($first->country, $first->item_name, $first->color_name, $size));
+                    $k = $this->key($first->country, $first->item_name, $first->color_name, $size);
+
+                    $s = $saved->get($k);
                     $quantities[$size] = $s ? (string) $s->quantity : '';
+                    $poQty[$size]      = (int) ($poBySize[$size] ?? 0);
+                    $usedQty[$size]    = (int) $used->get($k, 0);
                 }
 
                 return [
-                    'country'    => $first->country,
-                    'item_name'  => $first->item_name,
-                    'color_name' => $first->color_name,
-                    'available'  => $group->pluck('size')->all(),
-                    'quantities' => $quantities,
+                    'country'         => $first->country,
+                    'item_name'       => $first->item_name,
+                    'color_name'      => $first->color_name,
+                    'available'       => $group->pluck('size')->all(),
+                    'quantities'      => $quantities,
+                    'po_quantities'   => $poQty,
+                    'used_quantities' => $usedQty,
                 ];
             })->values()->all();
     }
+
+    /**
+     * সেভ করা marker plan-এ ব্যবহৃত quantity: "country|item|color|size" => qty।
+     * $exceptRef দিলে ওই ref বাদ যায় (Edit পেজের জন্য)।
+     */
+    private function usedMap(string $skclNo, ?string $exceptRef = null): Collection
+    {
+        return SizeQuantity::where('skcl_no', $skclNo)
+            ->when($exceptRef !== null, fn($q) => $q->where('ref_no', '!=', $exceptRef))
+            ->select('country', 'item_name', 'color_name', 'size', DB::raw('SUM(quantity) as used_qty'))
+            ->groupBy('country', 'item_name', 'color_name', 'size')
+            ->get()
+            ->keyBy(fn($r) => $this->key($r->country, $r->item_name, $r->color_name, $r->size))
+            ->map(fn($r) => (int) $r->used_qty);
+    }
+
 
     /**
      * একটি ref-এর ঘরগুলো লেখে। ফাঁকা ঘর থাকলে ওই ref থেকে রো মুছে যায়।

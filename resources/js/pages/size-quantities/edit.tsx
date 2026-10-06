@@ -52,7 +52,7 @@ export default function Edit({
   const handlePivotChange = (next: PivotChange) =>
     setData((d) => ({ ...d, rows: next.rows, fixed_qty: next.fixedQty }));
 
-  const handleSave = (e: FormEvent<HTMLFormElement>) => {
+  const handleSave = (e: React.SyntheticEvent) => {
     e.preventDefault();
     put(SizeQuantityController.update.url({ ref: refNo }), { preserveScroll: true });
   };
@@ -60,7 +60,7 @@ export default function Edit({
   return (
     <>
       <Head title={`Edit ${refNo}`} />
-      <div className="mx-auto max-w-6xl space-y-6 p-6">
+      <div className="mx-auto max-w-7xl space-y-6 p-6">
         <form onSubmit={handleSave}>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3">
@@ -73,13 +73,6 @@ export default function Edit({
               </Button>
             </CardHeader>
             <CardContent className="space-y-4">
-              <TableSelect
-                tables={tables}
-                value={data.table_no_id}
-                onChange={(v) => setData('table_no_id', v)}
-                error={errors.table_no_id}
-              />
-
               <PivotForm
                 key={refNo}
                 sizes={sizes}
@@ -87,7 +80,14 @@ export default function Edit({
                 fixedQty={data.fixed_qty}
                 initialRatios={deriveRatios(sizes, rows, fixedQty)}
                 onChange={handlePivotChange}
-              />
+              >
+                <TableSelect
+                  tables={tables}
+                  value={data.table_no_id}
+                  onChange={(v) => setData('table_no_id', v)}
+                  error={errors.table_no_id}
+                />
+              </PivotForm>
 
               {errors.rows && <p className="text-sm text-destructive">{errors.rows}</p>}
               {errors.fixed_qty && (

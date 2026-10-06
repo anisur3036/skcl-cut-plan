@@ -6,6 +6,8 @@ export type PivotRow = {
   color_name: string;
   available: string[];
   quantities: Quantities;
+  po_quantities: Record<string, number>;
+  used_quantities: Record<string, number>;
 };
 
 export type Meta = { file_no: string; order_no: string; style_no: string };

@@ -2,10 +2,10 @@ import { type FormEvent, useEffect } from 'react';
 import { Head, Link, useForm } from '@inertiajs/react';
 
 import MarkerPlanController from '@/actions/App/Http/Controllers/MarkerPlanController';
-import DeleteMarkerPlanButton from '@/components/size-quantity/delete-marker-plan-button';
-import PivotForm from '@/components/size-quantity/pivot-form';
-import StatusSelect from '@/components/size-quantity/status-select';
-import TableSelect from '@/components/size-quantity/table-select';
+import DeleteMarkerPlanButton from '@/components/marker-plan/delete-marker-plan-button';
+import PivotForm from '@/components/marker-plan/pivot-form';
+import StatusSelect from '@/components/marker-plan/status-select';
+import TableSelect from '@/components/marker-plan/table-select';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import type {
@@ -15,7 +15,7 @@ import type {
   PlanInfo,
   StatusOption,
   TableOption,
-} from '@/types/size-quantity';
+} from '@/types/marker-plan';
 
 type PageProps = {
   plan: PlanInfo;

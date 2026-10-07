@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import RemainingPo from '@/components/size-quantity/remaining-po';
+import RemainingPo from '@/components/marker-plan/remaining-po';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,8 +13,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { digitsOnly, recalc, toNum } from '@/lib/size-quantity';
-import type { PivotChange, PivotRow } from '@/types/size-quantity';
+import { digitsOnly, recalc, toNum } from '@/lib/marker-plan';
+import type { PivotChange, PivotRow } from '@/types/marker-plan';
 
 type Props = {
   sizes: string[];

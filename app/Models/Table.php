@@ -11,11 +11,6 @@ class Table extends Model
 
     protected $fillable = ['name'];
 
-    public function sizeQuantities(): HasMany
-    {
-        return $this->hasMany(SizeQuantity::class, 'table_no_id');
-    }
-
     public function markerPlans(): HasMany
     {
         return $this->hasMany(MarkerPlan::class, 'table_no_id');

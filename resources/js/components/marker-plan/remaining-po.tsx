@@ -7,8 +7,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { toNum } from '@/lib/size-quantity';
-import type { PivotRow } from '@/types/size-quantity';
+import { toNum } from '@/lib/marker-plan';
+import type { PivotRow } from '@/types/marker-plan';
 
 type Props = {
   sizes: string[];

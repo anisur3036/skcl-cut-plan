@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { StatusOption } from '@/types/size-quantity';
+import type { StatusOption } from '@/types/marker-plan';
 
 type Props = {
   statuses: StatusOption[];

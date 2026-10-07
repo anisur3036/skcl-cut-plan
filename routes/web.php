@@ -16,15 +16,15 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/import', [PoSheetController::class, 'import'])->name('import');
     });
 
-    Route::middleware('auth')->prefix('size-quantities')->name('size-quantities.')->group(function () {
-        Route::get('/', [SizeQuantityController::class, 'index'])->name('index');
-        Route::get('/create', [SizeQuantityController::class, 'create'])->name('create');
-        Route::post('/', [SizeQuantityController::class, 'store'])->name('store');
-        Route::get('/{ref}/edit', [SizeQuantityController::class, 'edit'])->name('edit');
-        Route::put('/{ref}', [SizeQuantityController::class, 'update'])->name('update');
-        Route::delete('/{ref}', [SizeQuantityController::class, 'destroy'])->name('destroy');
-        Route::get('/{ref}/pdf', [SizeQuantityController::class, 'pdf'])->name('pdf');
-    });
+    // Route::middleware('auth')->prefix('size-quantities')->name('size-quantities.')->group(function () {
+    //     Route::get('/', [SizeQuantityController::class, 'index'])->name('index');
+    //     Route::get('/create', [SizeQuantityController::class, 'create'])->name('create');
+    //     Route::post('/', [SizeQuantityController::class, 'store'])->name('store');
+    //     Route::get('/{ref}/edit', [SizeQuantityController::class, 'edit'])->name('edit');
+    //     Route::put('/{ref}', [SizeQuantityController::class, 'update'])->name('update');
+    //     Route::delete('/{ref}', [SizeQuantityController::class, 'destroy'])->name('destroy');
+    //     Route::get('/{ref}/pdf', [SizeQuantityController::class, 'pdf'])->name('pdf');
+    // });
 
 
     Route::middleware('auth')->prefix('marker-plans')->name('marker-plans.')->group(function () {

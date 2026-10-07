@@ -6,7 +6,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import type { TableOption } from '@/types/size-quantity';
+import type { TableOption } from '@/types/marker-plan';
 
 type Props = {
   tables: TableOption[];

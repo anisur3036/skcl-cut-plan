@@ -2,9 +2,9 @@ import { type FormEvent, useEffect, useState } from 'react';
 import { Head, Link, router, useForm } from '@inertiajs/react';
 
 import MarkerPlanController from '@/actions/App/Http/Controllers/MarkerPlanController';
-import PivotForm from '@/components/size-quantity/pivot-form';
-import StatusSelect from '@/components/size-quantity/status-select';
-import TableSelect from '@/components/size-quantity/table-select';
+import PivotForm from '@/components/marker-plan/pivot-form';
+import StatusSelect from '@/components/marker-plan/status-select';
+import TableSelect from '@/components/marker-plan/table-select';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -16,7 +16,7 @@ import type {
   PivotRow,
   StatusOption,
   TableOption,
-} from '@/types/size-quantity';
+} from '@/types/marker-plan';
 
 type PageProps = {
   skclNo: string;

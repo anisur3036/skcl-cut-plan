@@ -2,7 +2,7 @@ import { type FormEvent, useState } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
 
 import MarkerPlanController from '@/actions/App/Http/Controllers/MarkerPlanController';
-import DeleteMarkerPlanButton from '@/components/size-quantity/delete-marker-plan-button';
+import DeleteMarkerPlanButton from '@/components/marker-plan/delete-marker-plan-button';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,7 +15,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import type { MarkerPlanListItem, Paginated, StatusOption } from '@/types/size-quantity';
+import type { MarkerPlanListItem, Paginated, StatusOption } from '@/types/marker-plan';
 
 type PageProps = {
   plans: Paginated<MarkerPlanListItem>;

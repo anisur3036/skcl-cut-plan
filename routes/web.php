@@ -9,11 +9,12 @@ Route::inertia('/', 'welcome')->name('home');
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
 
-    Route::resource('po-sheets', PoSheetController::class);
+    Route::middleware('auth')->prefix('po-sheets')->name('po-sheets.')->group(function () {
+        Route::get('/', [PoSheetController::class, 'index'])->name('index');
+        Route::get('/template', [PoSheetController::class, 'template'])->name('template');
+        Route::post('/import', [PoSheetController::class, 'import'])->name('import');
+    });
 
-    //Route::get('/size-quantities', [SizeQuantityController::class, 'index'])->name('size-quantities.index');
-    //Route::post('/size-quantities', [SizeQuantityController::class, 'store'])->name('size-quantities.store');
-    //Route::put('/size-quantities/{ref}', [SizeQuantityController::class, 'update'])->name('size-quantities.update');
     Route::middleware('auth')->prefix('size-quantities')->name('size-quantities.')->group(function () {
         Route::get('/', [SizeQuantityController::class, 'index'])->name('index');
         Route::get('/create', [SizeQuantityController::class, 'create'])->name('create');

@@ -2,91 +2,54 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\PoSheet;
-use Illuminate\Http\RedirectResponse;
+use App\Exports\PoSheetTemplateExport;
+use App\Imports\PoSheetImport;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 
 class PoSheetController extends Controller
 {
-    public function index(Request $request): Response
+    public function index()
     {
-        $filters = $request->only(['search', 'country']);
-
-        $poSheets = PoSheet::query()
-            ->search($filters['search'] ?? null)
-            ->when($filters['country'] ?? null, fn ($query, $country) => $query->where('country', $country))
-            ->latest('id')
-            ->paginate(15)
-            ->withQueryString();
-
-        return Inertia::render('po-sheets/index', [
-            'poSheets' => $poSheets,
-            'filters' => $filters,
-            'countries' => PoSheet::query()
-                ->select('country')
-                ->distinct()
-                ->orderBy('country')
-                ->pluck('country'),
+        return Inertia::render('po-sheet/import', [
+            'result'      => session('import_result'),
+            'infoColumns' => PoSheetImport::INFO_COLUMNS,
         ]);
     }
 
-    public function create(): Response
+    public function template()
     {
-        return Inertia::render('po-sheets/create');
+        return Excel::download(new PoSheetTemplateExport, 'po-sheet-template.xlsx');
     }
 
-    public function store(Request $request): RedirectResponse
+    public function import(Request $request)
     {
-        $poSheet = PoSheet::create($this->validated($request));
-
-        return to_route('po-sheets.show', $poSheet)
-            ->with('success', 'PO sheet created.');
-    }
-
-    public function show(PoSheet $poSheet): Response
-    {
-        return Inertia::render('po-sheets/show', [
-            'poSheet' => $poSheet,
+        $request->validate([
+            'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
+        ], [
+            'file.required' => 'File name is required',
+            'file.mimes'    => 'Extension will be .xlsx or xls',
+            'file.max'      => 'Max size 10M',
         ]);
-    }
 
-    public function edit(PoSheet $poSheet): Response
-    {
-        return Inertia::render('po-sheets/edit', [
-            'poSheet' => $poSheet,
-        ]);
-    }
+        $import = new PoSheetImport();
 
-    public function update(Request $request, PoSheet $poSheet): RedirectResponse
-    {
-        $poSheet->update($this->validated($request));
+        try {
+            Excel::import($import, $request->file('file'));
+        } catch (\Throwable $e) {
+            report($e);
 
-        return to_route('po-sheets.show', $poSheet)
-            ->with('success', 'PO sheet updated.');
-    }
+            return redirect()->route('po-sheets.index')->with('import_result', [
+                'ok'          => false,
+                'created'     => 0,
+                'updated'     => 0,
+                'unchanged'   => 0,
+                'error_count' => 1,
+                'errors'      => ['File not save!' . $e->getMessage()],
+            ]);
+        }
 
-    public function destroy(PoSheet $poSheet): RedirectResponse
-    {
-        $poSheet->delete();
-
-        return to_route('po-sheets.index')
-            ->with('success', 'PO sheet deleted.');
-    }
-
-    private function validated(Request $request): array
-    {
-        return $request->validate([
-            'file_no' => ['required', 'string', 'max:255'],
-            'skcl_no' => ['required', 'string', 'max:255'],
-            'order_no' => ['required', 'string', 'max:255'],
-            'style_no' => ['required', 'string', 'max:255'],
-            'country' => ['required', 'string', 'max:255'],
-            'item_name' => ['required', 'string', 'max:255'],
-            'color_name' => ['required', 'string', 'max:255'],
-            'size' => ['required', 'string', 'max:255'],
-            'quantity' => ['required', 'integer', 'min:0'],
-        ]);
+        return redirect()->route('po-sheets.index')->with('import_result', $import->summary());
     }
 }

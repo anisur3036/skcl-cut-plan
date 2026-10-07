@@ -10,6 +10,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Inertia\Inertia;
 
 class SizeQuantityController extends Controller
@@ -23,6 +24,7 @@ class SizeQuantityController extends Controller
     {
         $search    = trim((string) $request->query('search', ''));
         $highlight = trim((string) $request->query('highlight', ''));
+        $deleted   = trim((string) $request->query('deleted', ''));
 
         $refs = SizeQuantity::query()
             ->leftJoin('tables', 'tables.id', '=', 'size_quantities.table_no_id')
@@ -76,6 +78,7 @@ class SizeQuantityController extends Controller
             'refs'      => $refs,
             'search'    => $search,
             'highlight' => $highlight,
+            'deleted'   => $deleted,
         ]);
     }
 
@@ -177,6 +180,7 @@ class SizeQuantityController extends Controller
             'skclNo'    => $skclNo,
             'tableNoId' => $firstSaved->table_no_id,
             'fixedQty'  => $firstSaved->fixed_qty !== null ? (string) $firstSaved->fixed_qty : '',
+            'ratios'    => $this->ratiosFor($sizes, $saved),
             'tables'    => $this->tableOptions(),
             'meta'      => $this->metaFrom($source->first()),
             'sizes'     => $sizes,
@@ -203,6 +207,95 @@ class SizeQuantityController extends Controller
         return redirect()->route('size-quantities.index', ['highlight' => $ref]);
     }
 
+    public function pdf(Request $request, string $ref)
+    {
+        $skclNo = trim((string) $request->query('skcl_no', ''));
+        abort_if($skclNo === '', 404);
+
+        $saved = SizeQuantity::where('ref_no', $ref)->where('skcl_no', $skclNo)->get();
+        abort_if($saved->isEmpty(), 404, 'Ref পাওয়া যায়নি।');
+
+        $groups = $saved
+            ->map(fn($r) => $this->groupKey($r->country, $r->item_name, $r->color_name))
+            ->unique()
+            ->all();
+
+        $source = PoSheet::where('skcl_no', $skclNo)->get()
+            ->filter(fn($r) => in_array($this->groupKey($r->country, $r->item_name, $r->color_name), $groups, true))
+            ->values();
+
+        abort_if($source->isEmpty(), 404);
+
+        $byKey      = $saved->keyBy(fn($r) => $this->key($r->country, $r->item_name, $r->color_name, $r->size));
+        $sizes      = $this->sizesFrom($source);
+        $firstSaved = $saved->first();
+        $fixed      = (int) ($firstSaved->fixed_qty ?? 0);
+
+        $rows = $source
+            ->groupBy(fn($r) => $this->groupKey($r->country, $r->item_name, $r->color_name))
+            ->map(function ($group) use ($sizes, $byKey, $fixed) {
+                $first = $group->first();
+
+                $ratios = [];
+                $total  = 0;
+                foreach ($sizes as $size) {
+                    $s     = $byKey->get($this->key($first->country, $first->item_name, $first->color_name, $size));
+                    $ratio = null;
+
+                    if ($s) {
+                        // সেভ করা ratio; পুরনো ref-এ না থাকলে quantity ÷ lay quantity
+                        $ratio = $s->ratio ?? (
+                            ($fixed > 0 && $s->quantity % $fixed === 0) ? intdiv((int) $s->quantity, $fixed) : null
+                        );
+                    }
+
+                    $ratios[$size] = $ratio;
+                    $total += $ratio ?? 0;
+                }
+
+                return [
+                    'country'    => $first->country,
+                    'item_name'  => $first->item_name,
+                    'color_name' => $first->color_name,
+                    'ratios'     => $ratios,
+                    'total'      => $total,
+                ];
+            })->values()->all();
+
+        $pdf = Pdf::loadView('pdf.marker-plan', [
+            'ref'       => $ref,
+            'skclNo'    => $skclNo,
+            'meta'      => $this->metaFrom($source->first()),
+            'tableName' => $firstSaved->table_no_id ? Table::find($firstSaved->table_no_id)?->name : null,
+            'layQty'    => $firstSaved->fixed_qty,
+            'totalQty'  => (int) $saved->sum('quantity'),
+            'createdAt' => $saved->sortBy('created_at')->first()->created_at,
+            'updatedAt' => $saved->sortByDesc('updated_at')->first()->updated_at,
+            'sizes'     => $sizes,
+            'rows'      => $rows,
+            'printedAt' => now(),
+        ])->setPaper('a4', 'landscape');
+
+        return $pdf->stream("marker-plan-{$ref}.pdf");
+    }
+
+    /* ------------------------------------------------------------------ */
+    /*  DELETE: একটি marker plan (ref) মুছে ফেলা                           */
+    /* ------------------------------------------------------------------ */
+    public function destroy(Request $request, string $ref)
+    {
+        $skclNo = trim((string) $request->input('skcl_no', ''));
+        abort_if($skclNo === '', 404);
+
+        // ref + skcl_no দুটো মিলিয়ে মোছা হয় (LEGACY ref একাধিক SKCL-এ থাকতে পারে)
+        $deleted = SizeQuantity::where('ref_no', $ref)
+            ->where('skcl_no', $skclNo)
+            ->delete();
+
+        abort_if($deleted === 0, 404, 'Ref পাওয়া যায়নি।');
+
+        return redirect()->route('size-quantities.index', ['deleted' => $ref]);
+    }
     /* ------------------------------------------------------------------ */
     /*  Helpers                                                             */
     /* ------------------------------------------------------------------ */
@@ -212,6 +305,7 @@ class SizeQuantityController extends Controller
             'skcl_no'             => ['required', 'string'],
             'table_no_id'         => ['required', 'integer', 'exists:tables,id'],
             'fixed_qty'           => ['nullable', 'integer', 'min:0'],
+            'ratios'              => ['nullable', 'array'],
             'rows'                => ['required', 'array', 'min:1'],
             'rows.*.country'      => ['required', 'string'],
             'rows.*.item_name'    => ['required', 'string'],
@@ -317,6 +411,7 @@ class SizeQuantityController extends Controller
         $written  = 0;
         $tableId  = (int) $data['table_no_id'];
         $fixedQty = ($data['fixed_qty'] ?? null) === null ? null : (int) $data['fixed_qty'];
+        $ratios   = $data['ratios'] ?? [];
 
         foreach ($data['rows'] as $row) {
             foreach ($row['quantities'] as $size => $qty) {
@@ -339,9 +434,13 @@ class SizeQuantityController extends Controller
                     continue;
                 }
 
+                // ratio শুধু Lay Quantity দেওয়া থাকলে সেভ হয়
+                $ratio = ($fixedQty !== null && isset($ratios[$size])) ? (int) $ratios[$size] : null;
+
                 SizeQuantity::updateOrCreate($match, [
                     'table_no_id' => $tableId,
                     'fixed_qty'   => $fixedQty,
+                    'ratio'       => $ratio,
                     'file_no'     => $src->file_no,
                     'order_no'    => $src->order_no,
                     'style_no'    => $src->style_no,
@@ -357,6 +456,31 @@ class SizeQuantityController extends Controller
             ]);
         }
     }
+
+
+    private function ratiosFor(array $sizes, Collection $saved): array
+    {
+        $fixed = (int) ($saved->first()->fixed_qty ?? 0);
+        $out   = [];
+
+        foreach ($sizes as $size) {
+            $cells = $saved->where('size', $size);
+
+            $withRatio = $cells->first(fn($r) => $r->ratio !== null);
+            if ($withRatio) {
+                $out[$size] = (string) $withRatio->ratio;
+                continue;
+            }
+
+            $any = $cells->first();
+            $out[$size] = ($any && $fixed > 0 && $any->quantity % $fixed === 0)
+                ? (string) intdiv((int) $any->quantity, $fixed)
+                : '1';
+        }
+
+        return $out;
+    }
+
 
     // REF-20261006-0001 ফরম্যাট
     private function nextRef(): string

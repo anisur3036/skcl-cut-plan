@@ -18,11 +18,16 @@ export type FormShape = {
   skcl_no: string;
   table_no_id: string;
   fixed_qty: string;
+  ratios: Record<string, string>;
   rows: PivotRow[];
 };
 
 // PivotForm থেকে পেজে পাঠানো পরিবর্তন
-export type PivotChange = { rows: PivotRow[]; fixedQty: string };
+export type PivotChange = {
+  rows: PivotRow[];
+  fixedQty: string
+  ratios: Record<string, string>;
+};
 
 export type RefListItem = {
   ref_no: string;

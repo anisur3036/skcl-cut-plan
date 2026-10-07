@@ -21,6 +21,9 @@ type PageProps = {
   rows: PivotRow[];
 };
 
+const defaultRatios = (sizes: string[]): Record<string, string> =>
+  Object.fromEntries(sizes.map((s) => [s, '1']));
+
 export default function Create({
   skclNo,
   colorName,
@@ -38,6 +41,7 @@ export default function Create({
     skcl_no: skclNo ?? '',
     table_no_id: '',
     fixed_qty: '',
+    ratios: defaultRatios(sizes),
     rows: rows ?? [],
   });
 
@@ -49,6 +53,7 @@ export default function Create({
       skcl_no: skclNo ?? '',
       table_no_id: d.table_no_id, // নতুন সার্চেও সিলেক্ট করা Table থাকবে
       fixed_qty: '',
+      ratios: defaultRatios(sizes),
       rows: rows ?? [],
     }));
     setSearch(skclNo ?? '');
@@ -66,7 +71,7 @@ export default function Create({
   };
 
   const handlePivotChange = (next: PivotChange) =>
-    setData((d) => ({ ...d, rows: next.rows, fixed_qty: next.fixedQty }));
+    setData((d) => ({ ...d, rows: next.rows, fixed_qty: next.fixedQty, ratios: next.ratios }));
 
   const handleSave = (e: React.SyntheticEvent) => {
     e.preventDefault();
@@ -138,6 +143,7 @@ export default function Create({
                   sizes={sizes}
                   rows={data.rows}
                   fixedQty={data.fixed_qty}
+                  ratios={data.ratios}
                   onChange={handlePivotChange}
                 >
                   <TableSelect

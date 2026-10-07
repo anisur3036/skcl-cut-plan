@@ -1,6 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import { Head, Link, router } from '@inertiajs/react';
-
+import DeleteRefButton from '@/components/size-quantity/delete-ref-button';
 import SizeQuantityController from '@/actions/App/Http/Controllers/SizeQuantityController';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -19,9 +19,10 @@ type PageProps = {
   refs: Paginated<RefListItem>;
   search: string;
   highlight: string;
+  deleted: string;
 };
 
-export default function Index({ refs, search, highlight }: PageProps) {
+export default function Index({ refs, search, highlight, deleted }: PageProps) {
   const [term, setTerm] = useState<string>(search ?? '');
 
   const handleSearch = (e: FormEvent<HTMLFormElement>) => {
@@ -52,6 +53,8 @@ export default function Index({ refs, search, highlight }: PageProps) {
             {highlight && (
               <p className="text-sm text-green-600">Saved ✔ Ref: {highlight}</p>
             )}
+
+            {deleted && <p className="text-sm text-destructive">Deleted ✔ Ref: {deleted}</p>}
 
             <form onSubmit={handleSearch} className="flex gap-2">
               <Input
@@ -121,6 +124,33 @@ export default function Index({ refs, search, highlight }: PageProps) {
                             Edit
                           </Link>
                         </Button>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button asChild size="sm" variant="outline">
+                            <Link
+                              href={SizeQuantityController.edit.url(
+                                { ref: r.ref_no },
+                                { query: { skcl_no: r.skcl_no } },
+                              )}
+                            >
+                              Edit
+                            </Link>
+                          </Button>
+                          <Button asChild size="sm" variant="outline">
+                            <a
+                              href={SizeQuantityController.pdf.url(
+                                { ref: r.ref_no },
+                                { query: { skcl_no: r.skcl_no } },
+                              )}
+                              target="_blank"
+                              rel="noreferrer"
+                            >
+                              PDF
+                            </a>
+                          </Button>
+                          <DeleteRefButton refNo={r.ref_no} skclNo={r.skcl_no} />
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

@@ -20,6 +20,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::post('/', [SizeQuantityController::class, 'store'])->name('store');
         Route::get('/{ref}/edit', [SizeQuantityController::class, 'edit'])->name('edit');
         Route::put('/{ref}', [SizeQuantityController::class, 'update'])->name('update');
+        Route::delete('/{ref}', [SizeQuantityController::class, 'destroy'])->name('destroy');
+        Route::get('/{ref}/pdf', [SizeQuantityController::class, 'pdf'])->name('pdf');
     });
 });
 

@@ -1,4 +1,6 @@
-import { type ReactNode, useState } from 'react';
+import type { ReactNode } from 'react';
+
+import RemainingPo from '@/components/size-quantity/remaining-po';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,27 +15,22 @@ import {
 } from '@/components/ui/table';
 import { digitsOnly, recalc, toNum } from '@/lib/size-quantity';
 import type { PivotChange, PivotRow } from '@/types/size-quantity';
-import RemainingPo from '@/components/size-quantity/remaining-po';
 
 type Props = {
   sizes: string[];
   rows: PivotRow[];
   fixedQty: string;
-  initialRatios?: Record<string, string>;
+  ratios: Record<string, string>;
   onChange: (next: PivotChange) => void;
-  children?: ReactNode;
+  children?: ReactNode; // টুলবারের বাঁ পাশে বসবে (Table select)
 };
 
-export default function PivotForm({ sizes, rows, fixedQty, initialRatios, onChange, children }: Props) {
-  // Ratio সেভ হয় না, শুধু হিসাবের জন্য
-  const [ratios, setRatios] = useState<Record<string, string>>(
-    () => initialRatios ?? Object.fromEntries(sizes.map((s) => [s, ''])),
-  );
-
+export default function PivotForm({ sizes, rows, fixedQty, ratios, onChange, children }: Props) {
   const setQty = (rowIdx: number, size: string, value: string) => {
     if (!digitsOnly(value)) return;
     onChange({
       fixedQty,
+      ratios,
       rows: rows.map((r, i) =>
         i === rowIdx ? { ...r, quantities: { ...r.quantities, [size]: value } } : r,
       ),
@@ -42,17 +39,19 @@ export default function PivotForm({ sizes, rows, fixedQty, initialRatios, onChan
 
   const handleRatioChange = (size: string, value: string) => {
     if (!digitsOnly(value)) return;
-    const next = { ...ratios, [size]: value };
-    setRatios(next);
-    if (fixedQty !== '') {
-      onChange({ fixedQty, rows: recalc(rows, toNum(fixedQty), next, size) });
-    }
+    const nextRatios = { ...ratios, [size]: value };
+    onChange({
+      fixedQty,
+      ratios: nextRatios,
+      rows: fixedQty !== '' ? recalc(rows, toNum(fixedQty), nextRatios, size) : rows,
+    });
   };
 
   const handleFixedChange = (value: string) => {
     if (!digitsOnly(value)) return;
     onChange({
       fixedQty: value,
+      ratios,
       rows: value === '' ? rows : recalc(rows, toNum(value), ratios),
     });
   };
@@ -62,6 +61,7 @@ export default function PivotForm({ sizes, rows, fixedQty, initialRatios, onChan
     const fixed = toNum(fixedQty);
     onChange({
       fixedQty,
+      ratios,
       rows: rows.map((r, i) => (i === idx ? recalc([r], fixed, ratios)[0] : r)),
     });
   };
@@ -75,6 +75,7 @@ export default function PivotForm({ sizes, rows, fixedQty, initialRatios, onChan
   return (
     <div className="space-y-4">
       <RemainingPo sizes={sizes} rows={rows} />
+
       <div className="flex flex-wrap items-start gap-4 rounded-md border bg-muted/40 p-3">
         {children}
 
@@ -94,6 +95,7 @@ export default function PivotForm({ sizes, rows, fixedQty, initialRatios, onChan
           Quantity = Lay Quantity × Ratio (live update, e.g. 40 × 3 = 120)
         </p>
       </div>
+
       <div className="overflow-x-auto rounded-md border">
         <Table>
           <TableHeader>

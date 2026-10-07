@@ -15,4 +15,9 @@ class Table extends Model
     {
         return $this->hasMany(SizeQuantity::class, 'table_no_id');
     }
+
+    public function markerPlans(): HasMany
+    {
+        return $this->hasMany(MarkerPlan::class, 'table_no_id');
+    }
 }

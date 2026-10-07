@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\PoSheetController;
 use App\Http\Controllers\SizeQuantityController;
+use App\Http\Controllers\MarkerPlanController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -23,6 +24,17 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::put('/{ref}', [SizeQuantityController::class, 'update'])->name('update');
         Route::delete('/{ref}', [SizeQuantityController::class, 'destroy'])->name('destroy');
         Route::get('/{ref}/pdf', [SizeQuantityController::class, 'pdf'])->name('pdf');
+    });
+
+
+    Route::middleware('auth')->prefix('marker-plans')->name('marker-plans.')->group(function () {
+        Route::get('/', [MarkerPlanController::class, 'index'])->name('index');
+        Route::get('/create', [MarkerPlanController::class, 'create'])->name('create');
+        Route::post('/', [MarkerPlanController::class, 'store'])->name('store');
+        Route::get('/{markerPlan}/edit', [MarkerPlanController::class, 'edit'])->name('edit');
+        Route::put('/{markerPlan}', [MarkerPlanController::class, 'update'])->name('update');
+        Route::get('/{markerPlan}/pdf', [MarkerPlanController::class, 'pdf'])->name('pdf');
+        Route::delete('/{markerPlan}', [MarkerPlanController::class, 'destroy'])->name('destroy');
     });
 });
 

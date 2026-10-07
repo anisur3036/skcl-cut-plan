@@ -1,4 +1,13 @@
+export type StatusOption = { value: string; label: string; locked: boolean };
 export type Quantities = Record<string, string>;
+
+export type MarkerPlanListItem = {
+  // ... আগের ফিল্ডগুলো
+  status: string;
+  locked: boolean;
+  total_qty: number;
+  created_at: string;
+};
 
 export type PivotRow = {
   country: string;
@@ -14,12 +23,9 @@ export type Meta = { file_no: string; order_no: string; style_no: string };
 
 export type TableOption = { id: number; name: string };
 
-export type StatusOption = { value: string; label: string, locked: boolean };
-
 export type FormShape = {
   skcl_no: string;
   table_no_id: string;
-  status: string;
   fixed_qty: string;
   ratios: Record<string, string>;
   rows: PivotRow[];
@@ -28,37 +34,22 @@ export type FormShape = {
 // PivotForm থেকে পেজে পাঠানো পরিবর্তন
 export type PivotChange = {
   rows: PivotRow[];
-  fixedQty: string;
+  fixedQty: string
   ratios: Record<string, string>;
 };
 
-export type PlanInfo = {
-  id: number;
+export type RefListItem = {
   ref_no: string;
   skcl_no: string;
   file_no: string;
   order_no: string;
   style_no: string;
-  country: string;
-  item_name: string;
-  color_name: string;
-};
-
-export type MarkerPlanListItem = {
-  id: number;
-  ref_no: string;
-  skcl_no: string;
-  order_no: string;
-  style_no: string;
-  country: string;
-  item_name: string;
-  color_name: string;
   table_name: string | null;
   fixed_qty: number | null;
-  status: string;
-  locked: boolean;
+  colors: string;
   total_qty: number;
   created_at: string;
+  updated_at: string;
 };
 
 export type Paginated<T> = {

@@ -50,6 +50,14 @@ const ORDER_ROWS: string[][] = [
   ['22222/1', '22222', 'Buyer A', 'efgh', 'T-Shirt', 'Black', '2026-12-15', '250', '200', '230', '125', '125'],
 ];
 
+const EXTRA_HEADERS = ['White, extra_cut_percent = 5', 'XS', 'S', 'M', 'L', 'XL'];
+
+const EXTRA_ROWS: string[][] = [
+  ['Excel-এ লেখা quantity', '168', '200', '300', '250', '250'],
+  ['Extra (5%, উপরের পূর্ণসংখ্যায়)', '9', '10', '15', '13', '13'],
+  ['সেভ হওয়া quantity', '177', '210', '315', '263', '263'],
+];
+
 const FABRIC_HEADERS = ['skcl_no', 'item_name', 'color', 'fabric_color', 'gsm', 'width', 'quantity_kg'];
 
 const FABRIC_ROWS: string[][] = [
@@ -185,6 +193,13 @@ export default function Index({ result }: PageProps) {
               <p className="font-semibold">শিট ১: Orders</p>
               <ul className="list-disc space-y-1 pl-5">
                 <li>
+                  <strong>Extra cut:</strong> size-এর ঘরে <strong>মূল quantity</strong> লিখুন এবং{' '}
+                  <code>extra_cut_percent</code> পূর্ণসংখ্যায় দিন (<code>5</code>, <code>5%</code> নয়)। আপলোডের সময় প্রতিটি
+                  size-এর quantity-র সঙ্গে extra (quantity × percent ÷ 100, উপরের পূর্ণসংখ্যায়) যোগ হয়ে সেই মান quantity হিসেবে
+                  সেভ হয়। যেমন ৫%-এ 168 → 177। একই ফাইল আবার আপলোড করলে একই ফল হয় (দ্বিগুণ হয় না)। percent ফাঁকা রাখলে
+                  Order-এর আগের percent ব্যবহার হয় (নতুন Order-এ 0)।
+                </li>
+                <li>
                   ১ম সারি হলো হেডার। আবশ্যক কলাম: <code>skcl_no, file_no, style, item_name, color</code>।
                   ঐচ্ছিক: <code>buyer, shipment_date</code> (তারিখ <code>yyyy-mm-dd</code>)।
                 </li>
@@ -206,6 +221,8 @@ export default function Index({ result }: PageProps) {
                 </li>
               </ul>
               <SampleTable headers={ORDER_HEADERS} rows={ORDER_ROWS} />
+              <p className="font-medium">Extra cut-এর হিসাব:</p>
+              <SampleTable headers={EXTRA_HEADERS} rows={EXTRA_ROWS} />
             </div>
 
             <div className="space-y-3">

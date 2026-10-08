@@ -194,7 +194,7 @@ export default function Create({
 
                 {lockOnSave && (
                   <p className="text-sm text-amber-600">
-                    ⚠ এই status-এ সেভ করলে marker plan(গুলো) লক হয়ে যাবে। এরপর আর edit বা delete করা যাবে না।
+                    You can not edit or delete if you sed status approved.
                   </p>
                 )}
 
@@ -203,7 +203,7 @@ export default function Create({
                     {processing ? 'Saving...' : 'Save Marker Plan'}
                   </Button>
                   <p className="text-sm text-muted-foreground">
-                    যেসব সারিতে quantity আছে, প্রতিটির জন্য আলাদা marker plan (আলাদা ref) তৈরি হবে।
+                    Some status here
                   </p>
                 </div>
               </CardContent>

@@ -4,6 +4,7 @@ use App\Http\Controllers\PoSheetController;
 use App\Http\Controllers\SizeQuantityController;
 use App\Http\Controllers\MarkerPlanController;
 use App\Http\Controllers\OrderImportController;
+use App\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -43,6 +44,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/{markerPlan}/pdf', [MarkerPlanController::class, 'pdf'])->name('pdf');
         Route::delete('/{markerPlan}', [MarkerPlanController::class, 'destroy'])->name('destroy');
     });
+
+    Route::get('/api/order/search', [SearchController::class, 'skcl']);
 });
 
 

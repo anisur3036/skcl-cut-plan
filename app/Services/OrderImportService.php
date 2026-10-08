@@ -8,6 +8,7 @@ use App\Models\OrderDetail;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
+use PhpOffice\PhpSpreadsheet\Cell\DataValidation;
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
@@ -18,17 +19,35 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class OrderImportService
 {
-    // ---- Orders শিট ----
-    public const ORDER_COLUMNS = ['skcl_no', 'file_no', 'buyer', 'style', 'item_name', 'color', 'shipment_date'];
+    // ---- Orders শিট (কলামের ক্রমই টেমপ্লেটের ক্রম) ----
+    public const ORDER_COLUMNS = [
+        'skcl_no',
+        'file_no',
+        'buyer',
+        'style',
+        'item_name',
+        'color',
+        'shipment_date',
+        'extra_cut_percent',
+        'max_lay',
+        'cad_consumption',
+        'required_fabrics',
+    ];
+    private const ORDER_TEXT_COLUMNS = ['skcl_no', 'file_no', 'buyer', 'style', 'item_name', 'color'];
     private const ORDER_REQUIRED = ['skcl_no', 'file_no', 'style', 'item_name', 'color'];
     private const ORDER_ALIASES = [
-        'buyer_name' => 'buyer',
-        'style_no'   => 'style',
-        'color_name' => 'color',
-        'shipment'   => 'shipment_date',
+        'buyer_name'      => 'buyer',
+        'style_no'        => 'style',
+        'color_name'      => 'color',
+        'shipment'        => 'shipment_date',
+        'extra_cut'       => 'extra_cut_percent',
+        'required_fabric' => 'required_fabrics',
     ];
     // পুরনো po_sheets ফাইলের কলাম, size হিসেবে ধরা হবে না
     private const IGNORED = ['country', 'order_no', 'order_qty', 'id', 'created_at', 'updated_at'];
+
+    // টেমপ্লেটে দেওয়া size কলাম
+    private const TEMPLATE_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
 
     // ---- Fabrics শিট ----
     public const FABRIC_COLUMNS = ['skcl_no', 'item_name', 'color', 'fabric_color', 'gsm', 'width', 'quantity_kg'];
@@ -104,17 +123,59 @@ class OrderImportService
     {
         $spreadsheet = new Spreadsheet();
 
+        /* ---------------- শিট ১: Orders ---------------- */
         $orders = $spreadsheet->getActiveSheet();
         $orders->setTitle('Orders');
-        $this->writeHeader($orders, [...self::ORDER_COLUMNS, 'XS', 'S', 'M', 'L', 'XL', '2XL', '3XL']);
-        // A–F Text (12/1 তারিখ হয়ে যাওয়া ঠেকাতে), G তারিখ
-        $orders->getStyle('A:F')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
-        $orders->getStyle('G:G')->getNumberFormat()->setFormatCode('yyyy-mm-dd');
+        $this->writeHeader($orders, [...self::ORDER_COLUMNS, ...self::TEMPLATE_SIZES]);
+        $orders->freezePane('A2');
 
+        $date = $this->colLetter('shipment_date');      // G
+        $pct  = $this->colLetter('extra_cut_percent');  // H (shipment_date-এর ঠিক পরে)
+        $lay  = $this->colLetter('max_lay');            // I
+        $cad  = $this->colLetter('cad_consumption');    // J
+        $fab  = $this->colLetter('required_fabrics');   // K
+
+        // A–F Text (12/1 তারিখ হয়ে যাওয়া ঠেকাতে)
+        $orders->getStyle('A:F')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
+        $orders->getStyle("{$date}:{$date}")->getNumberFormat()->setFormatCode('yyyy-mm-dd');
+        $orders->getStyle("{$pct}:{$lay}")->getNumberFormat()->setFormatCode('0');
+        $orders->getStyle("{$cad}:{$cad}")->getNumberFormat()->setFormatCode('0.000');
+        $orders->getStyle("{$fab}:{$fab}")->getNumberFormat()->setFormatCode('0.00');
+
+        // extra_cut_percent: 0–100 পূর্ণসংখ্যা
+        $this->addWholeNumberValidation(
+            $orders,
+            "{$pct}2:{$pct}5000",
+            0,
+            100,
+            'extra_cut_percent',
+            '0 থেকে 100-এর মধ্যে পূর্ণসংখ্যা লিখুন (যেমন 5, 5% নয়)। size-এর মূল quantity-র সঙ্গে এই শতাংশ extra যোগ হয়ে সেভ হবে।'
+        );
+
+        // max_lay: পূর্ণসংখ্যা ≥ 0
+        $this->addWholeNumberValidation($orders, "{$lay}2:{$lay}5000", 0, null, 'max_lay', 'পূর্ণসংখ্যা লিখুন।');
+
+        // size কলাম: পূর্ণসংখ্যা ≥ 0
+        $firstSize = Coordinate::stringFromColumnIndex(count(self::ORDER_COLUMNS) + 1);
+        $lastSize  = Coordinate::stringFromColumnIndex(count(self::ORDER_COLUMNS) + count(self::TEMPLATE_SIZES));
+        $this->addWholeNumberValidation(
+            $orders,
+            "{$firstSize}2:{$lastSize}5000",
+            0,
+            null,
+            'Size quantity',
+            'মূল (buyer-এর) quantity পূর্ণসংখ্যায় লিখুন। extra cut আপলোডের সময় নিজে যোগ হবে।'
+        );
+
+        /* ---------------- শিট ২: Fabrics ---------------- */
         $fabrics = $spreadsheet->createSheet();
         $fabrics->setTitle('Fabrics');
         $this->writeHeader($fabrics, self::FABRIC_COLUMNS);
+        $fabrics->freezePane('A2');
         $fabrics->getStyle('A:D')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
+
+        /* ---------------- শিট ৩: Example (ইমপোর্টে পড়া হয় না) ---------------- */
+        $this->buildExampleSheet($spreadsheet->createSheet());
 
         $spreadsheet->setActiveSheetIndex(0);
 
@@ -134,6 +195,95 @@ class OrderImportService
 
         for ($i = 1; $i <= count($headers); $i++) {
             $sheet->getColumnDimension(Coordinate::stringFromColumnIndex($i))->setAutoSize(true);
+        }
+    }
+
+    /** ORDER_COLUMNS-এর কোন কলাম কোন Excel অক্ষরে (A, B, C ...) */
+    private function colLetter(string $column): string
+    {
+        return Coordinate::stringFromColumnIndex(array_search($column, self::ORDER_COLUMNS, true) + 1);
+    }
+
+    /** পূর্ণসংখ্যা যাচাই: $max null হলে "≥ $min", নইলে "$min থেকে $max" */
+    private function addWholeNumberValidation(
+        Worksheet $sheet,
+        string $range,
+        int $min,
+        ?int $max,
+        string $title,
+        string $message
+    ): void {
+        $v = new DataValidation();
+        $v->setType(DataValidation::TYPE_WHOLE);
+        $v->setErrorStyle(DataValidation::STYLE_STOP);
+
+        if ($max === null) {
+            $v->setOperator(DataValidation::OPERATOR_GREATERTHANOREQUAL);
+            $v->setFormula1((string) $min);
+        } else {
+            $v->setOperator(DataValidation::OPERATOR_BETWEEN);
+            $v->setFormula1((string) $min);
+            $v->setFormula2((string) $max);
+        }
+
+        $v->setAllowBlank(true);
+        $v->setShowErrorMessage(true);
+        $v->setErrorTitle($title);
+        $v->setError($message);
+        $v->setShowInputMessage(true);
+        $v->setPromptTitle($title);
+        $v->setPrompt($message);
+
+        $sheet->setDataValidation($range, $v);
+    }
+
+    private function buildExampleSheet(Worksheet $sheet): void
+    {
+        $sheet->setTitle('Example');
+
+        $sheet->setCellValue('A1', 'নমুনা শিট: ইমপোর্টে এই শিট পড়া হয় না। আপনার ডাটা "Orders" শিটে দিন।');
+        $sheet->getStyle('A1')->getFont()->setBold(true);
+
+        $sizes   = ['XS', 'S', 'M', 'L', 'XL'];
+        $headers = [...self::ORDER_COLUMNS, ...$sizes];
+
+        $sheet->fromArray($headers, null, 'A3');
+        $sheet->getStyle('A3:' . Coordinate::stringFromColumnIndex(count($headers)) . '3')
+            ->getFont()->setBold(true);
+
+        $sheet->fromArray([
+            ['22222/1', '22222', 'Buyer A', 'efgh', 'T-Shirt', 'White', '2026-12-15', 5, 120, 0.245, 1250.5, 168, 200, 300, 250, 250],
+            ['22222/1', '22222', 'Buyer A', 'efgh', 'T-Shirt', 'Black', '2026-12-15', 3, 120, 0.25, 980, 250, 200, 230, 125, 125],
+        ], null, 'A4');
+
+        // extra cut-এর হিসাব (একই withExtra() ব্যবহার, তাই নিয়ম বদলালে নমুনাও বদলায়)
+        $percent = 5;
+        $base    = [168, 200, 300, 250, 250];
+        $saved   = array_map(fn(int $q) => $this->withExtra($q, $percent), $base);
+        $extra   = array_map(fn(int $q) => $this->withExtra($q, $percent) - $q, $base);
+
+        $sheet->setCellValue('A8', "উদাহরণ: White color, extra_cut_percent = {$percent}");
+        $sheet->getStyle('A8')->getFont()->setBold(true);
+
+        $sheet->fromArray(['', ...$sizes], null, 'A9');
+        $sheet->fromArray(['Excel-এ লেখা quantity', ...$base], null, 'A10');
+        $sheet->fromArray(["Extra ({$percent}%, উপরের পূর্ণসংখ্যায়)", ...$extra], null, 'A11');
+        $sheet->fromArray(['সেভ হওয়া quantity', ...$saved], null, 'A12');
+        $sheet->getStyle('A9:F9')->getFont()->setBold(true);
+        $sheet->getStyle('A12:F12')->getFont()->setBold(true);
+
+        $notes = [
+            'extra_cut_percent পূর্ণসংখ্যা লিখুন (5, 5% নয়)। size-এর ঘরে মূল quantity দিন, সেভ হবে quantity + extra।',
+            'buyer, shipment_date, extra_cut_percent, max_lay, cad_consumption, required_fabrics ফাঁকা রাখলে আগের মান থাকে।',
+            'shipment_date yyyy-mm-dd ফরম্যাটে লিখুন। কোনো size না লাগলে ঘর ফাঁকা বা 0 রাখুন।',
+        ];
+        foreach ($notes as $i => $line) {
+            $sheet->setCellValue('A' . (14 + $i), $line);
+        }
+
+        $sheet->getColumnDimension('A')->setWidth(34);
+        foreach (range('B', 'P') as $col) {
+            $sheet->getColumnDimension($col)->setWidth(14);
         }
     }
 
@@ -172,13 +322,20 @@ class OrderImportService
         if (! $sizeCols) {
             $this->errors[] = 'Orders শিটে কোনো size কলাম (XS, S, M ...) পাওয়া যায়নি।';
         }
-        $dupSizes = array_keys(array_filter(array_count_values($sizeCols), fn ($c) => $c > 1));
+        $dupSizes = array_keys(array_filter(array_count_values($sizeCols), fn($c) => $c > 1));
         if ($dupSizes) {
             $this->errors[] = 'Orders শিটে একই size কলাম একাধিকবার আছে: ' . implode(', ', $dupSizes);
         }
         if ($this->errors) {
             return [];
         }
+
+        $numeric = [
+            'extra_cut_percent' => ['int', 100],
+            'max_lay'           => ['int', null],
+            'cad_consumption'   => ['decimal', null],
+            'required_fabrics'  => ['decimal', null],
+        ];
 
         $result = [];
         $seen   = [];
@@ -193,11 +350,7 @@ class OrderImportService
             $ok  = true;
             $rec = ['row' => $n];
 
-            foreach (self::ORDER_COLUMNS as $col) {
-                if ($col === 'shipment_date') {
-                    continue;
-                }
-
+            foreach (self::ORDER_TEXT_COLUMNS as $col) {
                 $val = isset($info[$col]) ? $this->text($row[$info[$col]] ?? null) : '';
 
                 if ($val === '' && in_array($col, self::ORDER_REQUIRED, true)) {
@@ -220,6 +373,35 @@ class OrderImportService
                     $this->errors[] = "Orders Row {$n}: shipment_date সঠিক নয় (yyyy-mm-dd লিখুন)।";
                     $ok = false;
                 }
+            }
+
+            // ঐচ্ছিক সংখ্যার কলাম (ফাঁকা = আগের মান অপরিবর্তিত)
+            foreach ($numeric as $col => [$type, $max]) {
+                $rec[$col] = null;
+
+                if (! isset($info[$col])) {
+                    continue;
+                }
+
+                $t = $this->text($row[$info[$col]] ?? null);
+                if ($t === '') {
+                    continue;
+                }
+
+                $valid = is_numeric($t)
+                    && (float) $t >= 0
+                    && ($type !== 'int' || floor((float) $t) == (float) $t)
+                    && ($max === null || (float) $t <= $max);
+
+                if (! $valid) {
+                    $hint  = $type === 'int' ? 'পূর্ণসংখ্যা' : 'সংখ্যা';
+                    $limit = $max !== null ? ", সর্বোচ্চ {$max}" : '';
+                    $this->errors[] = "Orders Row {$n}: {$col} '{$t}' সঠিক নয় ({$hint}{$limit})।";
+                    $ok = false;
+                    continue;
+                }
+
+                $rec[$col] = $type === 'int' ? (int) $t : (float) $t;
             }
 
             $sizes = [];
@@ -406,23 +588,35 @@ class OrderImportService
             $order->file_no = $o['file_no'];
             $order->style   = $o['style'];
             if ($buyerId !== null) {
-                $order->buyer_id = $buyerId;           // ফাঁকা থাকলে আগের মান থাকে
+                $order->buyer_id = $buyerId;            // ফাঁকা থাকলে আগের মান থাকে
             }
             if ($o['shipment_date'] !== null) {
                 $order->shipment_date = $o['shipment_date'];
             }
+
+            // ফাঁকা থাকলে আগের মান থাকে
+            foreach (['extra_cut_percent', 'max_lay', 'cad_consumption', 'required_fabrics'] as $col) {
+                if ($o[$col] !== null) {
+                    $order->{$col} = $o[$col];
+                }
+            }
+
             $order->save();
 
-            // আগের মতোই merge: ফাইলের size আপডেট/যোগ, ফাইলে না থাকা size অপরিবর্তিত
-            foreach ($o['sizes'] as $size => $qty) {
+            // ফাইলের extra_cut_percent; ফাঁকা হলে Order-এর আগের percent (নতুন Order-এ 0)
+            $percent = (int) ($order->extra_cut_percent ?? 0);
+
+            // Excel-এর মূল quantity + extra => order_details.quantity-তে সেভ
+            foreach ($o['sizes'] as $size => $baseQty) {
                 OrderDetail::updateOrCreate(
                     ['order_id' => $order->id, 'size' => (string) $size],
-                    ['quantity' => $qty]
+                    ['quantity' => $this->withExtra($baseQty, $percent)]
                 );
                 $this->sizeRows++;
             }
 
-            $order->update(['order_qty' => (int) $order->details()->sum('quantity')]);
+            // order_qty = Excel-এর মূল quantity-র যোগফল (extra ছাড়া)
+            $order->update(['order_qty' => array_sum($o['sizes'])]);
 
             $isNew ? $this->ordersCreated++ : $this->ordersUpdated++;
         }
@@ -430,7 +624,7 @@ class OrderImportService
 
     private function saveFabrics(array $fabrics): void
     {
-        // order অনুযায়ী ভাগ: ফাইলে যে order আছে তার ফ্যাব্রিক নতুন করে বসে
+        // order অনুযায়ী ভাগ: ফাইলে যে order-এর ফ্যাব্রিক আছে তার ফ্যাব্রিক নতুন করে বসে
         $byOrder = [];
         foreach ($fabrics as $f) {
             $byOrder[mb_strtolower(implode('|', [$f['skcl_no'], $f['item_name'], $f['color']]))][] = $f;
@@ -447,7 +641,7 @@ class OrderImportService
             if (! $order) {
                 throw new ImportRejected(
                     "Fabrics Row {$first['row']}: {$first['skcl_no']} / {$first['item_name']} / {$first['color']} "
-                    . 'নামে কোনো order নেই (Orders শিটে বা সিস্টেমে আগে থাকতে হবে)।'
+                        . 'নামে কোনো order নেই (Orders শিটে বা সিস্টেমে আগে থাকতে হবে)।'
                 );
             }
 
@@ -506,7 +700,6 @@ class OrderImportService
         return true;
     }
 
-    /** সেলের মান পরিষ্কার স্ট্রিং বানায় (22222.0 -> "22222") */
     private function text(mixed $v): string
     {
         if ($v === null) {
@@ -540,8 +733,11 @@ class OrderImportService
             throw new \InvalidArgumentException('bad date');
         }
     }
+
+    private function withExtra(int $qty, int $percent): int
+    {
+        return $qty + intdiv($qty * $percent + 99, 100);
+    }
 }
 
-class ImportRejected extends \RuntimeException
-{
-}
+class ImportRejected extends \RuntimeException {}

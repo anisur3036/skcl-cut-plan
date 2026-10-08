@@ -66,6 +66,11 @@ export default function PivotForm({ sizes, rows, fixedQty, ratios, onChange, chi
     });
   };
 
+  const ratioTotal = sizes.reduce(
+    (sum, sz) => sum + toNum(ratios[sz]),
+    0
+  );
+
   const rowTotal = (r: PivotRow): number =>
     sizes.reduce((sum, sz) => sum + toNum(r.quantities[sz]), 0);
   const colTotal = (sz: string): number =>
@@ -124,7 +129,7 @@ export default function PivotForm({ sizes, rows, fixedQty, ratios, onChange, chi
                   />
                 </TableHead>
               ))}
-              <TableHead colSpan={2} />
+              <TableHead className='text-right font-bold'>{ratioTotal}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>

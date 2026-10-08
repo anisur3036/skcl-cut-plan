@@ -1,7 +1,8 @@
 import { type FormEvent, useState } from 'react';
-import { Head, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 
 import OrderImportController from '@/actions/App/Http/Controllers/OrderImportController';
+import FabricImportController from '@/actions/App/Http/Controllers/FabricImportController';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -21,7 +22,6 @@ type ImportResult = {
   orders_created: number;
   orders_updated: number;
   size_rows: number;
-  fabric_rows: number;
   error_count: number;
   errors: string[];
 };
@@ -58,12 +58,6 @@ const EXTRA_ROWS: string[][] = [
   ['সেভ হওয়া quantity', '177', '210', '315', '263', '263'],
 ];
 
-const FABRIC_HEADERS = ['skcl_no', 'item_name', 'color', 'fabric_color', 'gsm', 'width', 'quantity_kg'];
-
-const FABRIC_ROWS: string[][] = [
-  ['22222/1', 'T-Shirt', 'White', 'White', '180', '72', '1250.50'],
-  ['22222/1', 'T-Shirt', 'Black', 'Black', '180', '72', '980'],
-];
 
 function SampleTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
   return (
@@ -123,9 +117,14 @@ export default function Index({ result }: PageProps) {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-3">
             <CardTitle>Import Orders (Excel)</CardTitle>
-            <Button asChild variant="outline">
-              <a href={OrderImportController.template.url()}>Download Template (.xlsx)</a>
-            </Button>
+            <div className="flex gap-2">
+              <Button asChild variant="outline">
+                <Link href={FabricImportController.index.url()}>Fabrics Import</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <a href={OrderImportController.template.url()}>Download Template (.xlsx)</a>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="flex flex-wrap items-end gap-3">
@@ -157,7 +156,6 @@ export default function Index({ result }: PageProps) {
               <p>নতুন Order: {result.orders_created}টি</p>
               <p>আপডেট হওয়া Order: {result.orders_updated}টি</p>
               <p>Size রো (যোগ/আপডেট): {result.size_rows}টি</p>
-              <p>Fabric রো: {result.fabric_rows}টি</p>
             </CardContent>
           </Card>
         )}
@@ -190,7 +188,7 @@ export default function Index({ result }: PageProps) {
           </CardHeader>
           <CardContent className="space-y-6 text-sm">
             <div className="space-y-3">
-              <p className="font-semibold">শিট ১: Orders</p>
+              <p className="font-semibold">Order sheet</p>
               <ul className="list-disc space-y-1 pl-5">
                 <li>
                   <strong>Extra cut:</strong> size-এর ঘরে <strong>মূল quantity</strong> লিখুন এবং{' '}
@@ -226,7 +224,6 @@ export default function Index({ result }: PageProps) {
             </div>
 
             <div className="space-y-3">
-              <p className="font-semibold">শিট ২: Fabrics (ঐচ্ছিক)</p>
               <ul className="list-disc space-y-1 pl-5">
                 <li>
                   <code>skcl_no, item_name, color</code> দিয়ে কোন Order-এর ফ্যাব্রিক তা বোঝানো হয়। সেই Order
@@ -241,7 +238,6 @@ export default function Index({ result }: PageProps) {
                   একাধিক ফ্যাব্রিক রো দেওয়া যায়।
                 </li>
               </ul>
-              <SampleTable headers={FABRIC_HEADERS} rows={FABRIC_ROWS} />
             </div>
           </CardContent>
         </Card>

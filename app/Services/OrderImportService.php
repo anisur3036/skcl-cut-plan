@@ -49,31 +49,20 @@ class OrderImportService
     // টেমপ্লেটে দেওয়া size কলাম
     private const TEMPLATE_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL'];
 
-    // ---- Fabrics শিট ----
-    public const FABRIC_COLUMNS = ['skcl_no', 'item_name', 'color', 'fabric_color', 'gsm', 'width', 'quantity_kg'];
-    private const FABRIC_REQUIRED = ['skcl_no', 'item_name', 'color', 'fabric_color', 'quantity_kg'];
-    private const FABRIC_ALIASES = [
-        'color_name' => 'color',
-        'quantity'   => 'quantity_kg',
-        'kg'         => 'quantity_kg',
-    ];
-
     // ডাটাবেস কলামের সর্বোচ্চ দৈর্ঘ্য
     private const LIMITS = [
-        'skcl_no'      => 50,
-        'file_no'      => 50,
-        'buyer'        => 100,
-        'style'        => 100,
-        'item_name'    => 100,
-        'color'        => 60,
-        'fabric_color' => 60,
+        'skcl_no'   => 50,
+        'file_no'   => 50,
+        'buyer'     => 100,
+        'style'     => 100,
+        'item_name' => 100,
+        'color'     => 60,
     ];
 
     private int $buyersCreated = 0;
     private int $ordersCreated = 0;
     private int $ordersUpdated = 0;
     private int $sizeRows      = 0;
-    private int $fabricRows    = 0;
 
     /** @var string[] */
     private array $errors = [];
@@ -85,32 +74,19 @@ class OrderImportService
     {
         $spreadsheet = IOFactory::load($path);
 
-        $ordersSheet  = $spreadsheet->getSheetByName('Orders') ?? $spreadsheet->getSheet(0);
-        $fabricsSheet = $spreadsheet->getSheetByName('Fabrics');
-
-        $orders  = $this->parseOrders($this->rows($ordersSheet));
-        $fabrics = ($fabricsSheet && $fabricsSheet !== $ordersSheet)
-            ? $this->parseFabrics($this->rows($fabricsSheet))
-            : [];
+        // "Orders" নামের শিট, না থাকলে প্রথম শিট (Example বা পুরনো Fabrics শিট পড়া হয় না)
+        $ordersSheet = $spreadsheet->getSheetByName('Orders') ?? $spreadsheet->getSheet(0);
+        $orders      = $this->parseOrders($this->rows($ordersSheet));
 
         $spreadsheet->disconnectWorksheets();
         unset($spreadsheet);
 
-        if (! $this->errors && ! $orders && ! $fabrics) {
+        if (! $this->errors && ! $orders) {
             $this->errors[] = 'ইমপোর্ট করার মতো কোনো ডাটা পাওয়া যায়নি।';
         }
 
         if (! $this->errors) {
-            try {
-                DB::transaction(function () use ($orders, $fabrics) {
-                    $this->saveOrders($orders);
-                    $this->saveFabrics($fabrics);
-                });
-            } catch (ImportRejected $e) {
-                $this->errors[] = $e->getMessage();
-                $this->buyersCreated = $this->ordersCreated = $this->ordersUpdated = 0;
-                $this->sizeRows = $this->fabricRows = 0;
-            }
+            DB::transaction(fn() => $this->saveOrders($orders));
         }
 
         return $this->summary();
@@ -167,14 +143,7 @@ class OrderImportService
             'মূল (buyer-এর) quantity পূর্ণসংখ্যায় লিখুন। extra cut আপলোডের সময় নিজে যোগ হবে।'
         );
 
-        /* ---------------- শিট ২: Fabrics ---------------- */
-        $fabrics = $spreadsheet->createSheet();
-        $fabrics->setTitle('Fabrics');
-        $this->writeHeader($fabrics, self::FABRIC_COLUMNS);
-        $fabrics->freezePane('A2');
-        $fabrics->getStyle('A:D')->getNumberFormat()->setFormatCode(NumberFormat::FORMAT_TEXT);
-
-        /* ---------------- শিট ৩: Example (ইমপোর্টে পড়া হয় না) ---------------- */
+        /* ---------------- শিট ২: Example (ইমপোর্টে পড়া হয় না) ---------------- */
         $this->buildExampleSheet($spreadsheet->createSheet());
 
         $spreadsheet->setActiveSheetIndex(0);
@@ -204,7 +173,6 @@ class OrderImportService
         return Coordinate::stringFromColumnIndex(array_search($column, self::ORDER_COLUMNS, true) + 1);
     }
 
-    /** পূর্ণসংখ্যা যাচাই: $max null হলে "≥ $min", নইলে "$min থেকে $max" */
     private function addWholeNumberValidation(
         Worksheet $sheet,
         string $range,
@@ -237,6 +205,7 @@ class OrderImportService
         $sheet->setDataValidation($range, $v);
     }
 
+    /** নমুনা শিট: ইমপোর্টে পড়া হয় না, শুধু দেখার জন্য */
     private function buildExampleSheet(Worksheet $sheet): void
     {
         $sheet->setTitle('Example');
@@ -276,6 +245,7 @@ class OrderImportService
             'extra_cut_percent পূর্ণসংখ্যা লিখুন (5, 5% নয়)। size-এর ঘরে মূল quantity দিন, সেভ হবে quantity + extra।',
             'buyer, shipment_date, extra_cut_percent, max_lay, cad_consumption, required_fabrics ফাঁকা রাখলে আগের মান থাকে।',
             'shipment_date yyyy-mm-dd ফরম্যাটে লিখুন। কোনো size না লাগলে ঘর ফাঁকা বা 0 রাখুন।',
+            'ফ্যাব্রিকের তথ্য এই ফাইলে নয়, আলাদা "Fabrics Import" পেজ থেকে ইমপোর্ট করুন।',
         ];
         foreach ($notes as $i => $line) {
             $sheet->setCellValue('A' . (14 + $i), $line);
@@ -453,111 +423,6 @@ class OrderImportService
     }
 
     /* ------------------------------------------------------------------ */
-    /*  Parse: Fabrics (ঐচ্ছিক শিট)                                         */
-    /* ------------------------------------------------------------------ */
-    private function parseFabrics(array $rows): array
-    {
-        $hasAny = false;
-        foreach ($rows as $r) {
-            if (! $this->rowIsEmpty($r)) {
-                $hasAny = true;
-                break;
-            }
-        }
-        if (! $hasAny) {
-            return [];
-        }
-
-        $idxMap = [];
-        foreach ($rows[0] as $idx => $cell) {
-            $text = $this->text($cell);
-            if ($text === '') {
-                continue;
-            }
-            $key = $this->headerKey($text, self::FABRIC_ALIASES);
-            if (in_array($key, self::FABRIC_COLUMNS, true)) {
-                $idxMap[$key] = $idx;
-            }
-        }
-
-        $missing = array_diff(self::FABRIC_REQUIRED, array_keys($idxMap));
-        if ($missing) {
-            $this->errors[] = 'Fabrics শিটে এই কলামগুলো পাওয়া যায়নি: ' . implode(', ', $missing);
-            return [];
-        }
-
-        $result = [];
-
-        foreach (array_slice($rows, 1, null, true) as $i => $row) {
-            $n = $i + 1;
-
-            if ($this->rowIsEmpty($row)) {
-                continue;
-            }
-
-            $ok  = true;
-            $rec = ['row' => $n];
-
-            foreach (['skcl_no', 'item_name', 'color', 'fabric_color'] as $col) {
-                $val = $this->text($row[$idxMap[$col]] ?? null);
-
-                if ($val === '') {
-                    $this->errors[] = "Fabrics Row {$n}: {$col} ফাঁকা।";
-                    $ok = false;
-                }
-                if (mb_strlen($val) > self::LIMITS[$col]) {
-                    $this->errors[] = "Fabrics Row {$n}: {$col} অনেক লম্বা (সর্বোচ্চ " . self::LIMITS[$col] . ' অক্ষর)।';
-                    $ok = false;
-                }
-                $rec[$col] = $val;
-            }
-
-            $rec['gsm'] = null;
-            if (isset($idxMap['gsm'])) {
-                $t = $this->text($row[$idxMap['gsm']] ?? null);
-                if ($t !== '') {
-                    if (! is_numeric($t) || (float) $t < 0 || floor((float) $t) != (float) $t) {
-                        $this->errors[] = "Fabrics Row {$n}: gsm '{$t}' সঠিক পূর্ণসংখ্যা নয়।";
-                        $ok = false;
-                    } else {
-                        $rec['gsm'] = (int) $t;
-                    }
-                }
-            }
-
-            $rec['width'] = null;
-            if (isset($idxMap['width'])) {
-                $t = $this->text($row[$idxMap['width']] ?? null);
-                if ($t !== '') {
-                    if (! is_numeric($t) || (float) $t < 0) {
-                        $this->errors[] = "Fabrics Row {$n}: width '{$t}' সঠিক সংখ্যা নয়।";
-                        $ok = false;
-                    } else {
-                        $rec['width'] = (float) $t;
-                    }
-                }
-            }
-
-            $kg = $this->text($row[$idxMap['quantity_kg']] ?? null);
-            if ($kg === '') {
-                $this->errors[] = "Fabrics Row {$n}: quantity_kg ফাঁকা।";
-                $ok = false;
-            } elseif (! is_numeric($kg) || (float) $kg < 0) {
-                $this->errors[] = "Fabrics Row {$n}: quantity_kg '{$kg}' সঠিক সংখ্যা নয়।";
-                $ok = false;
-            } else {
-                $rec['quantity_kg'] = (float) $kg;
-            }
-
-            if ($ok) {
-                $result[] = $rec;
-            }
-        }
-
-        return $result;
-    }
-
-    /* ------------------------------------------------------------------ */
     /*  Save                                                                */
     /* ------------------------------------------------------------------ */
     private function saveOrders(array $orders): void
@@ -622,43 +487,6 @@ class OrderImportService
         }
     }
 
-    private function saveFabrics(array $fabrics): void
-    {
-        // order অনুযায়ী ভাগ: ফাইলে যে order-এর ফ্যাব্রিক আছে তার ফ্যাব্রিক নতুন করে বসে
-        $byOrder = [];
-        foreach ($fabrics as $f) {
-            $byOrder[mb_strtolower(implode('|', [$f['skcl_no'], $f['item_name'], $f['color']]))][] = $f;
-        }
-
-        foreach ($byOrder as $rows) {
-            $first = $rows[0];
-
-            $order = Order::where('skcl_no', $first['skcl_no'])
-                ->where('item_name', $first['item_name'])
-                ->where('color', $first['color'])
-                ->first();
-
-            if (! $order) {
-                throw new ImportRejected(
-                    "Fabrics Row {$first['row']}: {$first['skcl_no']} / {$first['item_name']} / {$first['color']} "
-                        . 'নামে কোনো order নেই (Orders শিটে বা সিস্টেমে আগে থাকতে হবে)।'
-                );
-            }
-
-            $order->fabrics()->delete();
-
-            foreach ($rows as $f) {
-                $order->fabrics()->create([
-                    'color'    => $f['fabric_color'],
-                    'gsm'      => $f['gsm'],
-                    'width'    => $f['width'],
-                    'quantity' => $f['quantity_kg'],
-                ]);
-                $this->fabricRows++;
-            }
-        }
-    }
-
     /* ------------------------------------------------------------------ */
     /*  Helpers                                                             */
     /* ------------------------------------------------------------------ */
@@ -670,7 +498,6 @@ class OrderImportService
             'orders_created' => $this->ordersCreated,
             'orders_updated' => $this->ordersUpdated,
             'size_rows'      => $this->sizeRows,
-            'fabric_rows'    => $this->fabricRows,
             'error_count'    => count($this->errors),
             'errors'         => array_slice($this->errors, 0, 50),
         ];
@@ -700,6 +527,7 @@ class OrderImportService
         return true;
     }
 
+    /** সেলের মান পরিষ্কার স্ট্রিং বানায় (22222.0 -> "22222") */
     private function text(mixed $v): string
     {
         if ($v === null) {
@@ -734,10 +562,9 @@ class OrderImportService
         }
     }
 
+    /** quantity + extra, যেখানে extra = quantity × percent ÷ 100 (উপরের পূর্ণসংখ্যায়) */
     private function withExtra(int $qty, int $percent): int
     {
         return $qty + intdiv($qty * $percent + 99, 100);
     }
 }
-
-class ImportRejected extends \RuntimeException {}

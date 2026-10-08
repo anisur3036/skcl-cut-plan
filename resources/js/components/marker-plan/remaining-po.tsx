@@ -42,7 +42,6 @@ export default function RemainingPo({ sizes, rows }: Props) {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Country</TableHead>
               <TableHead>Item</TableHead>
               <TableHead>Color</TableHead>
               {sizes.map((sz) => (
@@ -55,8 +54,7 @@ export default function RemainingPo({ sizes, rows }: Props) {
           </TableHeader>
           <TableBody>
             {rows.map((r) => (
-              <TableRow key={`${r.country}-${r.item_name}-${r.color_name}`}>
-                <TableCell>{r.country}</TableCell>
+              <TableRow key={`${r.order_id}`}>
                 <TableCell>{r.item_name}</TableCell>
                 <TableCell>{r.color_name}</TableCell>
                 {sizes.map((sz) => {
@@ -96,7 +94,7 @@ export default function RemainingPo({ sizes, rows }: Props) {
           </TableBody>
           <TableFooter>
             <TableRow>
-              <TableCell colSpan={3} className="font-semibold">
+              <TableCell colSpan={2} className="font-semibold">
                 Total
               </TableCell>
               {sizes.map((sz) => (

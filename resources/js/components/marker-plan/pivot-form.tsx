@@ -100,7 +100,6 @@ export default function PivotForm({ sizes, rows, fixedQty, ratios, onChange, chi
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Country</TableHead>
               <TableHead>Item</TableHead>
               <TableHead>Color</TableHead>
               {sizes.map((sz) => (
@@ -112,7 +111,7 @@ export default function PivotForm({ sizes, rows, fixedQty, ratios, onChange, chi
               <TableHead />
             </TableRow>
             <TableRow className="bg-muted/40">
-              <TableHead colSpan={3} className="text-right">
+              <TableHead colSpan={2} className="text-right">
                 Ratio
               </TableHead>
               {sizes.map((sz) => (
@@ -130,8 +129,7 @@ export default function PivotForm({ sizes, rows, fixedQty, ratios, onChange, chi
           </TableHeader>
           <TableBody>
             {rows.map((r, idx) => (
-              <TableRow key={`${r.country}-${r.item_name}-${r.color_name}`}>
-                <TableCell>{r.country}</TableCell>
+              <TableRow key={`${r.order_id}`}>
                 <TableCell>{r.item_name}</TableCell>
                 <TableCell>{r.color_name}</TableCell>
                 {sizes.map((sz) => (
@@ -161,7 +159,7 @@ export default function PivotForm({ sizes, rows, fixedQty, ratios, onChange, chi
           </TableBody>
           <TableFooter>
             <TableRow>
-              <TableCell colSpan={3} className="font-semibold">
+              <TableCell colSpan={2} className="font-semibold">
                 Total
               </TableCell>
               {sizes.map((sz) => (

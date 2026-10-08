@@ -95,11 +95,9 @@ export default function Edit({
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-3">
               <CardTitle className="text-base">
-                Edit Ref: {plan.ref_no} | SKCL: {plan.skcl_no} | File: {plan.file_no} |
-                Order: {plan.order_no} | Style: {plan.style_no} | {plan.country} /{' '}
-                {plan.item_name} / {plan.color_name}
-              </CardTitle>
-              <div className="flex gap-2">
+                Edit Ref: {plan.ref_no} | SKCL: {plan.skcl_no} | File: {plan.file_no} | Buyer:{' '}
+                {plan.buyer ?? '-'} | Style: {plan.style} | {plan.item_name} / {plan.color_name}
+              </CardTitle>              <div className="flex gap-2">
                 <DeleteMarkerPlanButton planId={plan.id} refNo={plan.ref_no} />
                 <Button asChild variant="outline" size="sm">
                   <a

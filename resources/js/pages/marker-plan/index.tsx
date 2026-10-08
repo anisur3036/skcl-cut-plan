@@ -88,9 +88,8 @@ export default function Index({ plans, statuses, search, highlight, deleted, err
                   <TableRow>
                     <TableHead>Ref No</TableHead>
                     <TableHead>SKCL No</TableHead>
-                    <TableHead>Order</TableHead>
+                    <TableHead>Buyer</TableHead>
                     <TableHead>Style</TableHead>
-                    <TableHead>Country</TableHead>
                     <TableHead>Item</TableHead>
                     <TableHead>Color</TableHead>
                     <TableHead>Table</TableHead>
@@ -105,7 +104,7 @@ export default function Index({ plans, statuses, search, highlight, deleted, err
                   {plans.data.length === 0 && (
                     <TableRow>
                       <TableCell
-                        colSpan={13}
+                        colSpan={12}
                         className="py-6 text-center text-muted-foreground"
                       >
                         No marker plans found.
@@ -121,9 +120,8 @@ export default function Index({ plans, statuses, search, highlight, deleted, err
                         {p.ref_no}
                       </TableCell>
                       <TableCell>{p.skcl_no}</TableCell>
-                      <TableCell>{p.order_no}</TableCell>
-                      <TableCell>{p.style_no}</TableCell>
-                      <TableCell>{p.country}</TableCell>
+                      <TableCell>{p.buyer ?? '-'}</TableCell>
+                      <TableCell>{p.style}</TableCell>
                       <TableCell>{p.item_name}</TableCell>
                       <TableCell>{p.color_name}</TableCell>
                       <TableCell>{p.table_name ?? '-'}</TableCell>

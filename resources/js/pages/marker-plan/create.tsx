@@ -160,8 +160,7 @@ export default function Create({
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">
-                  SKCL: {skclNo} | File: {meta.file_no} | Order: {meta.order_no} |
-                  Style: {meta.style_no}
+                  SKCL: {skclNo} | File: {meta.file_no} | Buyer: {meta.buyer ?? '-'} | Style: {meta.style}
                   {colorName && ` | Color: ${colorName}`}
                 </CardTitle>
               </CardHeader>

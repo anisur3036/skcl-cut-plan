@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\MarkerPlan;
 use App\Models\MarkerPlanDetail;
-use App\Models\PoSheet;
+use App\Models\Order;
 use App\Models\Table;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Closure;
@@ -33,16 +33,25 @@ class MarkerPlanController extends Controller
         )));
 
         $plans = MarkerPlan::query()
-            ->with('cuttingTable:id,name')
+            ->with([
+                'cuttingTable:id,name',
+                'order:id,skcl_no,style,item_name,color,buyer_id',
+                'order.buyer:id,name',
+            ])
             ->withSum('details as total_qty', 'quantity')
             ->when($search !== '', function ($q) use ($search) {
-                $q->where(function ($w) use ($search) {
-                    $w->where('ref_no', 'like', "%{$search}%")
-                        ->orWhere('skcl_no', 'like', "%{$search}%")
-                        ->orWhere('country', 'like', "%{$search}%")
-                        ->orWhere('item_name', 'like', "%{$search}%")
-                        ->orWhere('color_name', 'like', "%{$search}%")
-                        ->orWhereHas('cuttingTable', fn($t) => $t->where('name', 'like', "%{$search}%"));
+                $like = "%{$search}%";
+
+                $q->where(function ($w) use ($like) {
+                    $w->where('ref_no', 'like', $like)
+                        ->orWhereHas('order', function ($o) use ($like) {
+                            $o->where('skcl_no', 'like', $like)
+                                ->orWhere('style', 'like', $like)
+                                ->orWhere('item_name', 'like', $like)
+                                ->orWhere('color', 'like', $like)
+                                ->orWhereHas('buyer', fn($b) => $b->where('name', 'like', $like));
+                        })
+                        ->orWhereHas('cuttingTable', fn($t) => $t->where('name', 'like', $like));
                 });
             })
             ->orderByDesc('id')
@@ -51,12 +60,11 @@ class MarkerPlanController extends Controller
             ->through(fn(MarkerPlan $p) => [
                 'id'         => $p->id,
                 'ref_no'     => $p->ref_no,
-                'skcl_no'    => $p->skcl_no,
-                'order_no'   => $p->order_no,
-                'style_no'   => $p->style_no,
-                'country'    => $p->country,
-                'item_name'  => $p->item_name,
-                'color_name' => $p->color_name,
+                'skcl_no'    => $p->order?->skcl_no,
+                'buyer'      => $p->order?->buyer?->name,
+                'style'      => $p->order?->style,
+                'item_name'  => $p->order?->item_name,
+                'color_name' => $p->order?->color,
                 'table_name' => $p->cuttingTable?->name,
                 'fixed_qty'  => $p->fixed_qty,
                 'status'     => $p->status,
@@ -76,7 +84,7 @@ class MarkerPlanController extends Controller
     }
 
     /* ------------------------------------------------------------------ */
-    /*  CREATE: সার্চ + ফাঁকা ফর্ম                                         */
+    /*  CREATE: SKCL সার্চ + ফাঁকা ফর্ম                                    */
     /* ------------------------------------------------------------------ */
     public function create(Request $request)
     {
@@ -99,29 +107,34 @@ class MarkerPlanController extends Controller
             return Inertia::render('marker-plan/create', $base);
         }
 
-        $query = PoSheet::where('skcl_no', $skclNo);
+        $base['colors'] = Order::where('skcl_no', $skclNo)
+            ->distinct()->orderBy('color')->pluck('color')->all();
 
-        $base['colors'] = (clone $query)->distinct()->orderBy('color_name')->pluck('color_name')->all();
+        $orders = Order::with(['details', 'buyer:id,name'])
+            ->where('skcl_no', $skclNo)
+            ->when($colorName !== '', fn($q) => $q->where('color', $colorName))
+            ->orderBy('item_name')
+            ->orderBy('color')
+            ->get();
 
-        if ($colorName !== '') {
-            $query->where('color_name', $colorName);
-        }
-
-        $source = $query->get();
-
-        if ($source->isEmpty()) {
+        if ($orders->isEmpty()) {
             return Inertia::render('marker-plan/create', [...$base, 'found' => false]);
         }
 
-        $sizes = $this->sizesFrom($source);
-        $used  = $this->usedMap($skclNo);
+        $sizes = $this->sizesFrom($orders->flatMap(fn($o) => $o->details));
+        $used  = $this->usedMap($orders->pluck('id'));
+        $first = $orders->first();
 
         return Inertia::render('marker-plan/create', [
             ...$base,
             'found' => true,
-            'meta'  => $this->metaFrom($source->first()),
+            'meta'  => [
+                'file_no' => $first->file_no,
+                'style'   => $first->style,
+                'buyer'   => $first->buyer?->name,
+            ],
             'sizes' => $sizes,
-            'rows'  => $this->buildRows($source, $sizes, collect(), $used),
+            'rows'  => $this->buildRows($orders, $sizes, collect(), $used),
         ]);
     }
 
@@ -130,11 +143,15 @@ class MarkerPlanController extends Controller
     /* ------------------------------------------------------------------ */
     public function store(Request $request)
     {
-        $data   = $this->validated($request);
-        $source = $this->sourceFor($data['skcl_no']);
+        $data = $this->validated($request);
+
+        $orders = Order::with('details')
+            ->whereIn('id', collect($data['rows'])->pluck('order_id'))
+            ->get()
+            ->keyBy('id');
 
         $refs = $this->retryOnRefClash(
-            fn() => DB::transaction(fn() => $this->createPlans($data, $source))
+            fn() => DB::transaction(fn() => $this->createPlans($data, $orders))
         );
 
         return redirect()->route('marker-plans.index', ['highlight' => implode(',', $refs)]);
@@ -148,30 +165,24 @@ class MarkerPlanController extends Controller
         if ($markerPlan->isLocked()) {
             return $this->lockedResponse($markerPlan);
         }
+
+        $markerPlan->load(['order.details', 'order.buyer']);
+
+        $order   = $markerPlan->order;
         $details = $markerPlan->details()->get()->keyBy('size');
-
-        $source = PoSheet::where('skcl_no', $markerPlan->skcl_no)
-            ->where('country', $markerPlan->country)
-            ->where('item_name', $markerPlan->item_name)
-            ->where('color_name', $markerPlan->color_name)
-            ->get();
-
-        abort_if($source->isEmpty(), 404, 'Data not found of the PO');
-
-        $sizes = $this->sizesFrom($source);
-        $used  = $this->usedMap($markerPlan->skcl_no, $markerPlan->id); // এই plan বাদে
+        $sizes   = $this->sizesFrom($order->details);
+        $used    = $this->usedMap([$order->id], $markerPlan->id); // এই plan বাদে
 
         return Inertia::render('marker-plan/edit', [
             'plan' => [
                 'id'         => $markerPlan->id,
                 'ref_no'     => $markerPlan->ref_no,
-                'skcl_no'    => $markerPlan->skcl_no,
-                'file_no'    => $markerPlan->file_no,
-                'order_no'   => $markerPlan->order_no,
-                'style_no'   => $markerPlan->style_no,
-                'country'    => $markerPlan->country,
-                'item_name'  => $markerPlan->item_name,
-                'color_name' => $markerPlan->color_name,
+                'skcl_no'    => $order->skcl_no,
+                'file_no'    => $order->file_no,
+                'buyer'      => $order->buyer?->name,
+                'style'      => $order->style,
+                'item_name'  => $order->item_name,
+                'color_name' => $order->color,
             ],
             'tableNoId' => $markerPlan->table_no_id,
             'status'    => $markerPlan->status,
@@ -180,7 +191,7 @@ class MarkerPlanController extends Controller
             'tables'    => $this->tableOptions(),
             'statuses'  => $this->statusOptions(),
             'sizes'     => $sizes,
-            'rows'      => $this->buildRows($source, $sizes, $details, $used),
+            'rows'      => $this->buildRows(collect([$order]), $sizes, $details, $used),
         ]);
     }
 
@@ -192,23 +203,23 @@ class MarkerPlanController extends Controller
         if ($markerPlan->isLocked()) {
             return $this->lockedResponse($markerPlan);
         }
-        $data   = $this->validated($request);
-        $source = $this->sourceFor($markerPlan->skcl_no);
 
-        // country/item/color plan থেকেই নেওয়া হয় (বদলানো যায় না)
-        $row = array_merge($data['rows'][0], [
-            'country'    => $markerPlan->country,
-            'item_name'  => $markerPlan->item_name,
-            'color_name' => $markerPlan->color_name,
-        ]);
+        $data = $this->validated($request);
+        $markerPlan->load('order.details');
 
         $fixedQty = ($data['fixed_qty'] ?? null) === null ? null : (int) $data['fixed_qty'];
 
-        DB::transaction(function () use ($markerPlan, $data, $row, $fixedQty, $source) {
-            [, $details] = $this->buildDetails($row, $data['ratios'] ?? [], $fixedQty, $source);
+        DB::transaction(function () use ($markerPlan, $data, $fixedQty) {
+            // order plan থেকেই নেওয়া হয় (বদলানো যায় না)
+            $details = $this->buildDetails(
+                $data['rows'][0],
+                $data['ratios'] ?? [],
+                $fixedQty,
+                $markerPlan->order
+            );
 
             if (! $details) {
-                throw ValidationException::withMessages(['rows' => 'Please a at least 1 qty.']);
+                throw ValidationException::withMessages(['rows' => 'কমপক্ষে একটি quantity দিন।']);
             }
 
             $markerPlan->update([
@@ -225,10 +236,12 @@ class MarkerPlanController extends Controller
     }
 
     /* ------------------------------------------------------------------ */
-    /*  PDF: সাইজ ওয়াইজ ratio প্রিন্ট                                      */
+    /*  PDF: সাইজ ওয়াইজ ratio প্রিন্ট (লক হওয়া plan-ও প্রিন্ট করা যায়)   */
     /* ------------------------------------------------------------------ */
     public function pdf(MarkerPlan $markerPlan)
     {
+        $markerPlan->load(['order.buyer', 'cuttingTable']);
+
         $details = $markerPlan->details()->get()->keyBy('size');
         $sizes   = $this->sizesFrom($details);
 
@@ -242,6 +255,7 @@ class MarkerPlanController extends Controller
 
         $pdf = Pdf::loadView('pdf.marker-plan', [
             'plan'        => $markerPlan,
+            'order'       => $markerPlan->order,
             'tableName'   => $markerPlan->cuttingTable?->name,
             'statusLabel' => MarkerPlan::STATUSES[$markerPlan->status] ?? $markerPlan->status,
             'sizes'       => $sizes,
@@ -262,19 +276,12 @@ class MarkerPlanController extends Controller
         if ($markerPlan->isLocked()) {
             return $this->lockedResponse($markerPlan);
         }
+
         $ref = $markerPlan->ref_no;
 
         $markerPlan->delete();
 
         return redirect()->route('marker-plans.index', ['deleted' => $ref]);
-    }
-
-    private function lockedResponse(MarkerPlan $plan)
-    {
-        return redirect()->route('marker-plans.index')->with(
-            'error',
-            "Ref {$plan->ref_no} Approved হয়ে গেছে, তাই এটি আর edit বা delete করা যাবে না।"
-        );
     }
 
     /* ================================================================== */
@@ -283,16 +290,13 @@ class MarkerPlanController extends Controller
     private function validated(Request $request): array
     {
         return $request->validate([
-            'skcl_no'             => ['required', 'string'],
             'table_no_id'         => ['required', 'integer', 'exists:tables,id'],
             'status'              => ['required', Rule::in(array_keys(MarkerPlan::STATUSES))],
             'fixed_qty'           => ['nullable', 'integer', 'min:0'],
             'ratios'              => ['nullable', 'array'],
             'ratios.*'            => ['nullable', 'integer', 'min:0'],
             'rows'                => ['required', 'array', 'min:1'],
-            'rows.*.country'      => ['required', 'string'],
-            'rows.*.item_name'    => ['required', 'string'],
-            'rows.*.color_name'   => ['required', 'string'],
+            'rows.*.order_id'     => ['required', 'integer', 'exists:orders,id'],
             'rows.*.quantities'   => ['required', 'array'],
             'rows.*.quantities.*' => ['nullable', 'integer', 'min:0'],
         ], [
@@ -304,8 +308,7 @@ class MarkerPlanController extends Controller
         ]);
     }
 
-    /** quantity আছে এমন প্রতিটি সারির জন্য একটি করে plan + details */
-    private function createPlans(array $data, Collection $source): array
+    private function createPlans(array $data, Collection $orders): array
     {
         $nextRef  = $this->refGenerator();
         $fixedQty = ($data['fixed_qty'] ?? null) === null ? null : (int) $data['fixed_qty'];
@@ -313,21 +316,19 @@ class MarkerPlanController extends Controller
         $refs     = [];
 
         foreach ($data['rows'] as $row) {
-            [$src, $details] = $this->buildDetails($row, $ratios, $fixedQty, $source);
+            $order = $orders->get($row['order_id']);
+            if (! $order) {
+                continue;
+            }
 
-            if (! $src || ! $details) {
+            $details = $this->buildDetails($row, $ratios, $fixedQty, $order);
+            if (! $details) {
                 continue; // এই সারিতে quantity নেই, plan হবে না
             }
 
             $plan = MarkerPlan::create([
                 'ref_no'      => $nextRef(),
-                'skcl_no'     => $src->skcl_no,
-                'file_no'     => $src->file_no,
-                'order_no'    => $src->order_no,
-                'style_no'    => $src->style_no,
-                'country'     => $src->country,
-                'item_name'   => $src->item_name,
-                'color_name'  => $src->color_name,
+                'order_id'    => $order->id,
                 'table_no_id' => (int) $data['table_no_id'],
                 'fixed_qty'   => $fixedQty,
                 'status'      => $data['status'],
@@ -338,19 +339,15 @@ class MarkerPlanController extends Controller
         }
 
         if (! $refs) {
-            throw ValidationException::withMessages(['rows' => 'At least give 1 qty']);
+            throw ValidationException::withMessages(['rows' => 'কমপক্ষে একটি quantity দিন।']);
         }
 
         return $refs;
     }
 
-    /**
-     * একটি সারির quantity থেকে details বানায়।
-     * ফেরত: [po_sheets-এর প্রথম মিলে যাওয়া রো, details অ্যারে]
-     */
-    private function buildDetails(array $row, array $ratios, ?int $fixedQty, Collection $source): array
+    /** একটি সারির quantity থেকে details বানায় (শুধু order-এ থাকা size) */
+    private function buildDetails(array $row, array $ratios, ?int $fixedQty, Order $order): array
     {
-        $src     = null;
         $details = [];
 
         foreach ($row['quantities'] as $size => $qty) {
@@ -358,32 +355,20 @@ class MarkerPlanController extends Controller
                 continue;
             }
 
-            $s = $source->get($this->key($row['country'], $row['item_name'], $row['color_name'], $size));
-            if (! $s) {
-                continue; // po_sheets-এ নেই এমন size সেভ হবে না
+            $po = $order->details->first(fn($d) => (string) $d->size === (string) $size);
+            if (! $po) {
+                continue; // order-এ নেই এমন size সেভ হবে না
             }
 
-            $src ??= $s;
-
             $details[] = [
-                'size'     => $s->size,
+                'size'     => $po->size,
                 // ratio শুধু Lay Quantity দেওয়া থাকলে সেভ হয়
                 'ratio'    => ($fixedQty !== null && isset($ratios[$size])) ? (int) $ratios[$size] : null,
                 'quantity' => (int) $qty,
             ];
         }
 
-        return [$src, $details];
-    }
-
-    private function sourceFor(string $skclNo): Collection
-    {
-        $source = PoSheet::where('skcl_no', $skclNo)->get()
-            ->keyBy(fn($r) => $this->key($r->country, $r->item_name, $r->color_name, $r->size));
-
-        abort_if($source->isEmpty(), 422, 'SKCL not found');
-
-        return $source;
+        return $details;
     }
 
     /** সাইজ সাজানো (XS, S, M, L, XL ... বাকিগুলো শেষে) */
@@ -396,50 +381,33 @@ class MarkerPlanController extends Controller
             })->values()->all();
     }
 
-    private function metaFrom($first): array
+    private function buildRows(Collection $orders, array $sizes, Collection $savedBySize, Collection $used): array
     {
-        return [
-            'file_no'  => $first->file_no,
-            'order_no' => $first->order_no,
-            'style_no' => $first->style_no,
-        ];
-    }
+        return $orders->map(function (Order $order) use ($sizes, $savedBySize, $used) {
+            $poBySize = $order->details->keyBy('size');
 
-    private function buildRows(Collection $source, array $sizes, Collection $savedBySize, Collection $used): array
-    {
-        return $source
-            ->groupBy(fn($r) => $this->groupKey($r->country, $r->item_name, $r->color_name))
-            ->map(function ($group) use ($sizes, $savedBySize, $used) {
-                $first = $group->first();
+            $quantities = [];
+            $poQty      = [];
+            $usedQty    = [];
 
-                $poBySize = $group->groupBy('size')
-                    ->map(fn($g) => (int) $g->sum(fn($r) => (int) $r->quantity));
+            foreach ($sizes as $size) {
+                $d = $savedBySize->get($size);
 
-                $quantities = [];
-                $poQty      = [];
-                $usedQty    = [];
+                $quantities[$size] = $d ? (string) $d->quantity : '';
+                $poQty[$size]      = (int) ($poBySize->get($size)?->quantity ?? 0);
+                $usedQty[$size]    = (int) $used->get($order->id . '|' . $size, 0);
+            }
 
-                foreach ($sizes as $size) {
-                    $d = $savedBySize->get($size);
-
-                    $quantities[$size] = $d ? (string) $d->quantity : '';
-                    $poQty[$size]      = (int) ($poBySize[$size] ?? 0);
-                    $usedQty[$size]    = (int) $used->get(
-                        $this->key($first->country, $first->item_name, $first->color_name, $size),
-                        0
-                    );
-                }
-
-                return [
-                    'country'         => $first->country,
-                    'item_name'       => $first->item_name,
-                    'color_name'      => $first->color_name,
-                    'available'       => $group->pluck('size')->all(),
-                    'quantities'      => $quantities,
-                    'po_quantities'   => $poQty,
-                    'used_quantities' => $usedQty,
-                ];
-            })->values()->all();
+            return [
+                'order_id'        => $order->id,
+                'item_name'       => $order->item_name,
+                'color_name'      => $order->color,
+                'available'       => $order->details->pluck('size')->all(),
+                'quantities'      => $quantities,
+                'po_quantities'   => $poQty,
+                'used_quantities' => $usedQty,
+            ];
+        })->values()->all();
     }
 
     /** Edit পেজের ratio: সেভ করা মান, না থাকলে 1 */
@@ -455,32 +423,24 @@ class MarkerPlanController extends Controller
         return $out;
     }
 
-    private function usedMap(string $skclNo, ?int $exceptPlanId = null): Collection
+    private function usedMap(Collection|array $orderIds, ?int $exceptPlanId = null): Collection
     {
         return MarkerPlanDetail::query()
             ->join('marker_plans', 'marker_plans.id', '=', 'marker_plan_details.marker_plan_id')
-            ->where('marker_plans.skcl_no', $skclNo)
+            ->whereIn('marker_plans.order_id', $orderIds)
             ->where('marker_plans.status', '!=', MarkerPlan::STATUS_CANCELLED)
             ->when($exceptPlanId !== null, fn($q) => $q->where('marker_plans.id', '!=', $exceptPlanId))
             ->select(
-                'marker_plans.country',
-                'marker_plans.item_name',
-                'marker_plans.color_name',
+                'marker_plans.order_id',
                 'marker_plan_details.size',
                 DB::raw('SUM(marker_plan_details.quantity) as used_qty')
             )
-            ->groupBy(
-                'marker_plans.country',
-                'marker_plans.item_name',
-                'marker_plans.color_name',
-                'marker_plan_details.size'
-            )
+            ->groupBy('marker_plans.order_id', 'marker_plan_details.size')
             ->get()
-            ->keyBy(fn($r) => $this->key($r->country, $r->item_name, $r->color_name, $r->size))
+            ->keyBy(fn($r) => $r->order_id . '|' . $r->size)
             ->map(fn($r) => (int) $r->used_qty);
     }
 
-    /** REF-20261007-0001, 0002 ... (একই Save-এ একাধিক plan হলে ক্রমান্বয়ে) */
     private function refGenerator(): Closure
     {
         $prefix = 'REF-' . now()->format('Ymd') . '-';
@@ -509,6 +469,14 @@ class MarkerPlanController extends Controller
         }
     }
 
+    private function lockedResponse(MarkerPlan $plan)
+    {
+        return redirect()->route('marker-plans.index')->with(
+            'error',
+            "Ref {$plan->ref_no} Approved হয়ে গেছে, তাই এটি আর edit বা delete করা যাবে না।"
+        );
+    }
+
     private function tableOptions(): array
     {
         return Table::orderBy('name')->get(['id', 'name'])->all();
@@ -517,18 +485,12 @@ class MarkerPlanController extends Controller
     private function statusOptions(): array
     {
         return collect(MarkerPlan::STATUSES)
-            ->map(fn($label, $value) => ['value' => $value, 'label' => $label])
+            ->map(fn($label, $value) => [
+                'value'  => $value,
+                'label'  => $label,
+                'locked' => in_array($value, MarkerPlan::LOCKED_STATUSES, true),
+            ])
             ->values()
             ->all();
-    }
-
-    private function groupKey(string $country, string $item, string $color): string
-    {
-        return implode('|', [$country, $item, $color]);
-    }
-
-    private function key(string $country, string $item, string $color, string $size): string
-    {
-        return implode('|', [$country, $item, $color, $size]);
     }
 }

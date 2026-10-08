@@ -33,6 +33,11 @@ class MarkerPlan extends Model
         return $this->hasMany(MarkerPlanDetail::class);
     }
 
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
+    }
+
     public function isLocked(): bool
     {
         return in_array($this->status, self::LOCKED_STATUSES, true);

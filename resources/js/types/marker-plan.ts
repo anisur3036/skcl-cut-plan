@@ -1,7 +1,7 @@
 export type Quantities = Record<string, string>;
 
 export type PivotRow = {
-  country: string;
+  order_id: number;
   item_name: string;
   color_name: string;
   available: string[];
@@ -10,11 +10,11 @@ export type PivotRow = {
   used_quantities: Record<string, number>;
 };
 
-export type Meta = { file_no: string; order_no: string; style_no: string };
+export type Meta = { file_no: string; style: string; buyer: string | null };
 
 export type TableOption = { id: number; name: string };
 
-export type StatusOption = { value: string; label: string, locked: boolean };
+export type StatusOption = { value: string; label: string; locked: boolean };
 
 export type FormShape = {
   skcl_no: string;
@@ -37,9 +37,8 @@ export type PlanInfo = {
   ref_no: string;
   skcl_no: string;
   file_no: string;
-  order_no: string;
-  style_no: string;
-  country: string;
+  buyer: string | null;
+  style: string;
   item_name: string;
   color_name: string;
 };
@@ -48,9 +47,8 @@ export type MarkerPlanListItem = {
   id: number;
   ref_no: string;
   skcl_no: string;
-  order_no: string;
-  style_no: string;
-  country: string;
+  buyer: string | null;
+  style: string;
   item_name: string;
   color_name: string;
   table_name: string | null;

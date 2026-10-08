@@ -36,15 +36,15 @@
     <table class="info">
         <tr>
             <td class="label">Ref No</td><td><strong>{{ $plan->ref_no }}</strong></td>
-            <td class="label">SKCL No</td><td>{{ $plan->skcl_no }}</td>
-            <td class="label">File No</td><td>{{ $plan->file_no }}</td>
-            <td class="label">Order No</td><td>{{ $plan->order_no }}</td>
+            <td class="label">SKCL No</td><td>{{ $order->skcl_no }}</td>
+            <td class="label">File No</td><td>{{ $order->file_no }}</td>
+            <td class="label">Buyer</td><td>{{ $order->buyer?->name ?? '-' }}</td>
         </tr>
         <tr>
-            <td class="label">Style No</td><td>{{ $plan->style_no }}</td>
-            <td class="label">Country</td><td>{{ $plan->country }}</td>
-            <td class="label">Item</td><td>{{ $plan->item_name }}</td>
-            <td class="label">Color</td><td>{{ $plan->color_name }}</td>
+            <td class="label">Style</td><td>{{ $order->style }}</td>
+            <td class="label">Item</td><td>{{ $order->item_name }}</td>
+            <td class="label">Color</td><td>{{ $order->color }}</td>
+            <td class="label">Shipment</td><td>{{ $order->shipment_date?->format('d M Y') ?? '-' }}</td>
         </tr>
         <tr>
             <td class="label">Table</td><td>{{ $tableName ?? '-' }}</td>

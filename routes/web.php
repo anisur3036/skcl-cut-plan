@@ -3,6 +3,7 @@
 use App\Http\Controllers\PoSheetController;
 use App\Http\Controllers\SizeQuantityController;
 use App\Http\Controllers\MarkerPlanController;
+use App\Http\Controllers\OrderImportController;
 use Illuminate\Support\Facades\Route;
 
 Route::inertia('/', 'welcome')->name('home');
@@ -10,11 +11,17 @@ Route::inertia('/', 'welcome')->name('home');
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
 
-    Route::middleware('auth')->prefix('po-sheets')->name('po-sheets.')->group(function () {
-        Route::get('/', [PoSheetController::class, 'index'])->name('index');
-        Route::get('/template', [PoSheetController::class, 'template'])->name('template');
-        Route::post('/import', [PoSheetController::class, 'import'])->name('import');
+    Route::middleware('auth')->prefix('order-import')->name('order-import.')->group(function () {
+        Route::get('/', [OrderImportController::class, 'index'])->name('index');
+        Route::get('/template', [OrderImportController::class, 'template'])->name('template');
+        Route::post('/', [OrderImportController::class, 'import'])->name('import');
     });
+
+    //Route::middleware('auth')->prefix('po-sheets')->name('po-sheets.')->group(function () {
+    //   Route::get('/', [PoSheetController::class, 'index'])->name('index');
+    //  Route::get('/template', [PoSheetController::class, 'template'])->name('template');
+    // Route::post('/import', [PoSheetController::class, 'import'])->name('import');
+    //});
 
     // Route::middleware('auth')->prefix('size-quantities')->name('size-quantities.')->group(function () {
     //     Route::get('/', [SizeQuantityController::class, 'index'])->name('index');

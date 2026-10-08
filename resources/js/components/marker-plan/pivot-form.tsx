@@ -22,7 +22,7 @@ type Props = {
   fixedQty: string;
   ratios: Record<string, string>;
   onChange: (next: PivotChange) => void;
-  children?: ReactNode; // টুলবারের বাঁ পাশে বসবে (Table select)
+  children?: ReactNode;
 };
 
 export default function PivotForm({ sizes, rows, fixedQty, ratios, onChange, children }: Props) {

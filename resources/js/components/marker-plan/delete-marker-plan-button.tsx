@@ -42,7 +42,7 @@ export default function DeleteMarkerPlanButton({ planId, refNo }: Props) {
         <AlertDialogHeader>
           <AlertDialogTitle>Delete this marker plan?</AlertDialogTitle>
           <AlertDialogDescription>
-            Ref {refNo} এবং এর সব size-quantity স্থায়ীভাবে মুছে যাবে। এটি আর ফেরানো যাবে না।
+            Ref {refNo} will be delete not will back.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>

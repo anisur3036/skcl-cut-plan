@@ -13,10 +13,9 @@ class MarkerPlan extends Model
     public const STATUS_APPROVED = 'approved';
     public const LOCKED_STATUSES = [self::STATUS_APPROVED];
 
-    // value => label (এখান থেকেই ফর্ম, তালিকা ও PDF-এর স্ট্যাটাস আসে)
     public const STATUSES = [
-        'draft'     => 'Draft',
-        'approved'  => 'Approved',
+        'draft' => 'Draft',
+        'approved' => 'Approved',
         'completed' => 'Completed',
         'cancelled' => 'Cancelled',
     ];

@@ -104,7 +104,7 @@ export default function Index({ result }: PageProps) {
       preserveScroll: true,
       onFinish: () => {
         setData('file', null);
-        setInputKey((k) => k + 1); // ফাইল ইনপুট খালি করে
+        setInputKey((k) => k + 1);
       },
     });
   };
@@ -152,10 +152,10 @@ export default function Index({ result }: PageProps) {
           <Card className="border-green-600">
             <CardContent className="space-y-1 pt-6 text-sm">
               <p className="font-semibold text-green-600">Import সফল হয়েছে ✔</p>
-              <p>নতুন Buyer: {result.buyers_created}টি</p>
-              <p>নতুন Order: {result.orders_created}টি</p>
-              <p>আপডেট হওয়া Order: {result.orders_updated}টি</p>
-              <p>Size রো (যোগ/আপডেট): {result.size_rows}টি</p>
+              <p>New Buyer: {result.buyers_created} pcs</p>
+              <p>New Order: {result.orders_created} pcs</p>
+              <p>Update Order: {result.orders_updated} pcs</p>
+              <p>Size add or update: {result.size_rows} pcs</p>
             </CardContent>
           </Card>
         )}
@@ -164,7 +164,7 @@ export default function Index({ result }: PageProps) {
           <Card className="border-destructive">
             <CardContent className="space-y-2 pt-6 text-sm">
               <p className="font-semibold text-destructive">
-                কোনো ডাটা ইমপোর্ট হয়নি। ভুল পাওয়া গেছে: {result.error_count}টি
+               No data will import: {result.error_count}
               </p>
               <ul className="list-disc space-y-1 pl-5">
                 {result.errors.map((err, i) => (
@@ -173,74 +173,12 @@ export default function Index({ result }: PageProps) {
               </ul>
               {result.error_count > result.errors.length && (
                 <p className="text-muted-foreground">
-                  ... আরও {result.error_count - result.errors.length}টি ভুল আছে। আগে এগুলো ঠিক করে
-                  আবার চেষ্টা করুন।
+                  More error: {result.error_count - result.errors.length} please check the error.
                 </p>
               )}
             </CardContent>
           </Card>
         )}
-
-        {/* Format guide */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Excel কীভাবে সাজাবেন</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6 text-sm">
-            <div className="space-y-3">
-              <p className="font-semibold">Order sheet</p>
-              <ul className="list-disc space-y-1 pl-5">
-                <li>
-                  <strong>Extra cut:</strong> size-এর ঘরে <strong>মূল quantity</strong> লিখুন এবং{' '}
-                  <code>extra_cut_percent</code> পূর্ণসংখ্যায় দিন (<code>5</code>, <code>5%</code> নয়)। আপলোডের সময় প্রতিটি
-                  size-এর quantity-র সঙ্গে extra (quantity × percent ÷ 100, উপরের পূর্ণসংখ্যায়) যোগ হয়ে সেই মান quantity হিসেবে
-                  সেভ হয়। যেমন ৫%-এ 168 → 177। একই ফাইল আবার আপলোড করলে একই ফল হয় (দ্বিগুণ হয় না)। percent ফাঁকা রাখলে
-                  Order-এর আগের percent ব্যবহার হয় (নতুন Order-এ 0)।
-                </li>
-                <li>
-                  ১ম সারি হলো হেডার। আবশ্যক কলাম: <code>skcl_no, file_no, style, item_name, color</code>।
-                  ঐচ্ছিক: <code>buyer, shipment_date</code> (তারিখ <code>yyyy-mm-dd</code>)।
-                </li>
-                <li>
-                  বাকি <strong>প্রতিটি হেডার একটি size</strong> (XS, S, M, L, XL, 2XL, 28 ...)। ঘরে সেই
-                  size-এর quantity লিখুন। ফাঁকা বা <code>0</code> ঘর বাদ যায়।
-                </li>
-                <li>
-                  একটি সারি = একটি <code>skcl_no + item_name + color</code>। এটি আগে থাকলে আপডেট হবে, না
-                  থাকলে নতুন Order তৈরি হবে। একই ফাইলে একই কম্বিনেশন দুইবার দেওয়া যাবে না।
-                </li>
-                <li>
-                  Buyer না থাকলে নতুন তৈরি হয়। <code>buyer</code> বা <code>shipment_date</code> ফাঁকা রাখলে
-                  আগের মান অপরিবর্তিত থাকে। <code>order_qty</code> সাইজগুলোর যোগফল থেকে নিজে হিসাব হয়।
-                </li>
-                <li>
-                  <code>skcl_no</code> (যেমন <code>22222/1</code>) Text হিসেবে রাখুন। টেমপ্লেটে আগে থেকেই Text
-                  করা আছে।
-                </li>
-              </ul>
-              <SampleTable headers={ORDER_HEADERS} rows={ORDER_ROWS} />
-              <p className="font-medium">Extra cut-এর হিসাব:</p>
-              <SampleTable headers={EXTRA_HEADERS} rows={EXTRA_ROWS} />
-            </div>
-
-            <div className="space-y-3">
-              <ul className="list-disc space-y-1 pl-5">
-                <li>
-                  <code>skcl_no, item_name, color</code> দিয়ে কোন Order-এর ফ্যাব্রিক তা বোঝানো হয়। সেই Order
-                  Orders শিটে বা আগে থেকে সিস্টেমে থাকতে হবে।
-                </li>
-                <li>
-                  <code>fabric_color</code> ফ্যাব্রিকের রং, <code>gsm</code> ও <code>width</code> ঐচ্ছিক,{' '}
-                  <code>quantity_kg</code> কেজিতে (দশমিক চলবে)।
-                </li>
-                <li>
-                  ফাইলে যে Order-এর ফ্যাব্রিক আছে, তার আগের ফ্যাব্রিক রো মুছে নতুনগুলো বসে। একটি Order-এ
-                  একাধিক ফ্যাব্রিক রো দেওয়া যায়।
-                </li>
-              </ul>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </>
   );

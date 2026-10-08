@@ -25,9 +25,9 @@ class FabricImportController extends Controller
         $request->validate([
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
         ], [
-            'file.required' => 'একটি Excel ফাইল বাছুন।',
-            'file.mimes'    => 'শুধু .xlsx, .xls বা .csv ফাইল দেওয়া যাবে।',
-            'file.max'      => 'ফাইলের সাইজ ১০ MB-এর বেশি হতে পারবে না।',
+            'file.required' => 'Select a excel file',
+            'file.mimes' => 'File extension will be xlsx, xls, csv',
+            'file.max' => 'Max size 10 M',
         ]);
 
         try {
@@ -36,12 +36,12 @@ class FabricImportController extends Controller
             report($e);
 
             $result = [
-                'ok'              => false,
+                'ok' => false,
                 'orders_affected' => 0,
-                'fabric_rows'     => 0,
-                'replaced_rows'   => 0,
-                'error_count'     => 1,
-                'errors'          => ['ফাইলটি পড়া বা সেভ করা যায়নি: ' . $e->getMessage()],
+                'fabric_rows' => 0,
+                'replaced_rows' => 0,
+                'error_count' => 1,
+                'errors' => ['File not read or save' . $e->getMessage()],
             ];
         }
 

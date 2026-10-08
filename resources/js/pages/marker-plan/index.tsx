@@ -136,7 +136,7 @@ export default function Index({ plans, statuses, search, highlight, deleted, err
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           {p.locked ? (
-                            <span title="Approved হওয়ায় edit করা যায় না">
+                            <span title="Will not be delete">
                               <Button type="button" size="sm" variant="outline" disabled>
                                 Edit
                               </Button>
@@ -154,7 +154,7 @@ export default function Index({ plans, statuses, search, highlight, deleted, err
                           </Button>
 
                           {p.locked ? (
-                            <span title="Approved হওয়ায় delete করা যায় না">
+                            <span title="Will not be delete.">
                               <Button type="button" size="sm" variant="destructive" disabled>
                                 Delete
                               </Button>

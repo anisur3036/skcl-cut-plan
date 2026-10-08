@@ -3,7 +3,6 @@ import type { PivotRow } from '@/types/size-quantity';
 export const toNum = (v: string | undefined): number => parseInt(v ?? '', 10) || 0;
 export const digitsOnly = (v: string) => v === '' || /^\d+$/.test(v);
 
-/** quantity = fixed × ratio. onlySize দিলে শুধু সেই সাইজ কলাম আপডেট হয়। */
 export function recalc(
   rows: PivotRow[],
   fixed: number,

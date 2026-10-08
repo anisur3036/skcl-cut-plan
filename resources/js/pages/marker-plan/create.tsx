@@ -56,13 +56,12 @@ export default function Create({
     rows: rows ?? [],
   });
 
-  // rows-এর কনটেন্ট বদলালেই শুধু ফর্ম রিসেট (validation error-এ ইনপুট মুছবে না)
   const rowsSig = JSON.stringify(rows ?? []);
 
   useEffect(() => {
     setData((d) => ({
       skcl_no: skclNo ?? '',
-      table_no_id: d.table_no_id, // নতুন সার্চেও Table ও Status থাকবে
+      table_no_id: d.table_no_id, // 
       status: d.status,
       fixed_qty: '',
       ratios: defaultRatios(sizes),
@@ -98,7 +97,7 @@ export default function Create({
     if (
       lockOnSave &&
       !window.confirm(
-        'এই status-এ সেভ করলে marker plan(গুলো) লক হয়ে যাবে, আর edit বা delete করা যাবে না। চালিয়ে যাবেন?',
+        'Can not edit or delete.',
       )
     ) {
       return;

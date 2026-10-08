@@ -18,7 +18,6 @@ type Props = {
 const redIfNegative = (n: number) => (n < 0 ? 'text-destructive font-semibold' : '');
 
 export default function RemainingPo({ sizes, rows }: Props) {
-  // Remaining = PO − আগের marker plan-এ ব্যবহৃত − এই ফর্মে এখনকার quantity
   const remaining = (r: PivotRow, sz: string): number =>
     (r.po_quantities?.[sz] ?? 0) - (r.used_quantities?.[sz] ?? 0) - toNum(r.quantities[sz]);
 
@@ -115,13 +114,9 @@ export default function RemainingPo({ sizes, rows }: Props) {
         </Table>
       </div>
 
-      <p className="text-xs text-muted-foreground">
-        Remaining = PO Qty − আগের marker plan − এই ফর্মের quantity (ঘরের উপর মাউস রাখলে হিসাব দেখা যাবে)।
-      </p>
+      <p className="text-xs text-muted-foreground">&nbsp;</p>
       {anyOver && (
-        <p className="text-sm text-destructive">
-          কিছু সাইজে quantity PO quantity ছাড়িয়ে গেছে (লাল সংখ্যা)।
-        </p>
+        <p className="text-sm text-destructive">Some size quantities are negetive</p>
       )}
     </div>
   );

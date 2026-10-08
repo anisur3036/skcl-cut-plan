@@ -49,7 +49,6 @@ export default function Edit({
     rows,
   });
 
-  // কনটেন্ট বদলালেই শুধু ফর্ম রিসেট
   const rowsSig = JSON.stringify(rows);
   const ratiosSig = JSON.stringify(ratios);
 
@@ -79,7 +78,7 @@ export default function Edit({
     if (
       lockOnSave &&
       !window.confirm(
-        'এই status-এ Update করলে marker plan লক হয়ে যাবে, আর edit বা delete করা যাবে না। চালিয়ে যাবেন?',
+        'Can not edit or delete',
       )
     ) {
       return;
@@ -142,10 +141,7 @@ export default function Edit({
               )}
 
               {lockOnSave && (
-                <p className="text-sm text-amber-600">
-                  ⚠ এই status-এ Update করলে marker plan লক হয়ে যাবে। এরপর আর edit বা delete করা যাবে না (শুধু PDF
-                  প্রিন্ট করা যাবে)।
-                </p>
+                <p className="text-sm text-amber-600">Can not edit or delete after save.</p>
               )}
 
               <Button type="submit" disabled={processing}>

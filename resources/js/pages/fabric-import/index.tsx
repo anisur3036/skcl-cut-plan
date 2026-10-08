@@ -53,7 +53,7 @@ export default function Index({ result }: PageProps) {
       preserveScroll: true,
       onFinish: () => {
         setData('file', null);
-        setInputKey((k) => k + 1); // ফাইল ইনপুট খালি করে
+        setInputKey((k) => k + 1);
       },
     });
   };
@@ -100,10 +100,9 @@ export default function Index({ result }: PageProps) {
         {result && result.ok && (
           <Card className="border-green-600">
             <CardContent className="space-y-1 pt-6 text-sm">
-              <p className="font-semibold text-green-600">Import সফল হয়েছে ✔</p>
-              <p>ফ্যাব্রিক বসেছে এমন Order: {result.orders_affected}টি</p>
-              <p>নতুন ফ্যাব্রিক রো: {result.fabric_rows}টি</p>
-              <p>আগের মুছে যাওয়া ফ্যাব্রিক রো: {result.replaced_rows}টি</p>
+              <p className="font-semibold text-green-600">Import done ✔</p>
+              <p>Order: {result.orders_affected} pcs</p>
+              <p>New row: {result.fabric_rows} pcs</p>
             </CardContent>
           </Card>
         )}
@@ -112,7 +111,7 @@ export default function Index({ result }: PageProps) {
           <Card className="border-destructive">
             <CardContent className="space-y-2 pt-6 text-sm">
               <p className="font-semibold text-destructive">
-                কোনো ডাটা ইমপোর্ট হয়নি। ভুল পাওয়া গেছে: {result.error_count}টি
+                No data import: {result.error_count}
               </p>
               <ul className="list-disc space-y-1 pl-5">
                 {result.errors.map((err, i) => (
@@ -121,68 +120,12 @@ export default function Index({ result }: PageProps) {
               </ul>
               {result.error_count > result.errors.length && (
                 <p className="text-muted-foreground">
-                  ... আরও {result.error_count - result.errors.length}টি ভুল আছে। আগে এগুলো ঠিক করে
-                  আবার চেষ্টা করুন।
+                  more errors {result.error_count - result.errors.length}. Please fix these.
                 </p>
               )}
             </CardContent>
           </Card>
         )}
-
-        {/* Format guide */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Excel কীভাবে সাজাবেন</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <ul className="list-disc space-y-1 pl-5">
-              <li>
-                ১ম সারি হলো হেডার। আবশ্যক কলাম:{' '}
-                <code>skcl_no, item_name, color, fabric_color, quantity_kg</code>। ঐচ্ছিক:{' '}
-                <code>gsm, width</code>।
-              </li>
-              <li>
-                <code>skcl_no + item_name + color</code> দিয়ে কোন Order-এর ফ্যাব্রিক তা বোঝানো হয়। সেই Order
-                আগে <strong>Orders Import</strong> দিয়ে সিস্টেমে থাকতে হবে, নইলে সারি নম্বরসহ এরর আসবে।
-              </li>
-              <li>
-                <code>fabric_color</code> ফ্যাব্রিকের রং, এটি Order-এর <code>color</code> থেকে আলাদা হতে পারে।{' '}
-                <code>quantity_kg</code> কেজিতে (দশমিক চলবে), <code>gsm</code> পূর্ণসংখ্যা, <code>width</code>{' '}
-                সংখ্যা।
-              </li>
-              <li>একটি Order-এ একাধিক ফ্যাব্রিক রো দেওয়া যায় (নিচের উদাহরণে White-এ দুটি)।</li>
-              <li>
-                <strong>ফাইলে যে Order আছে, তার আগের সব ফ্যাব্রিক মুছে ফাইলের রোগুলো বসে।</strong> ফাইলে না
-                থাকা Order-এর ফ্যাব্রিক অপরিবর্তিত থাকে। একটি ভুল থাকলে কিছুই সেভ হয় না।
-              </li>
-            </ul>
-
-            <div className="overflow-x-auto rounded-md border">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    {HEADERS.map((h) => (
-                      <TableHead key={h} className="whitespace-nowrap">
-                        {h}
-                      </TableHead>
-                    ))}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {ROWS.map((row, i) => (
-                    <TableRow key={i}>
-                      {row.map((cell, j) => (
-                        <TableCell key={j} className="whitespace-nowrap">
-                          {cell}
-                        </TableCell>
-                      ))}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </CardContent>
-        </Card>
       </div>
     </>
   );

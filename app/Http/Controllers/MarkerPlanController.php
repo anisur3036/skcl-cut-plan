@@ -96,7 +96,6 @@ class MarkerPlanController extends Controller
             'colorName' => $colorName,
             'tables' => $this->tableOptions(),
             'statuses' => $this->statusOptions(),
-            'colors' => [],
             'found' => null,
             'meta' => null,
             'sizes' => [],
@@ -107,8 +106,6 @@ class MarkerPlanController extends Controller
             return Inertia::render('marker-plan/create', $base);
         }
 
-        $base['colors'] = Order::where('skcl_no', $skclNo)
-            ->distinct()->orderBy('color')->pluck('color')->all();
 
         $orders = Order::with(['details', 'buyer:id,name'])
             ->where('skcl_no', $skclNo)

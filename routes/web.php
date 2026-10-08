@@ -3,6 +3,7 @@
 use App\Http\Controllers\MarkerPlanController;
 use App\Http\Controllers\OrderImportController;
 use App\Http\Controllers\FabricImportController;
+use App\Http\Controllers\MarkerPlanOptionController;
 use App\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
 
@@ -36,6 +37,18 @@ Route::middleware(['auth', 'verified'])->group(function () {
     });
 
     Route::get('/api/order/search', [SearchController::class, 'skcl']);
+
+
+    Route::middleware('auth')->prefix('marker-plan-options')->name('marker-plan-options.')->group(function () {
+        Route::get('/skcl', [MarkerPlanOptionController::class, 'skcl'])->name('skcl');
+        Route::get('/skcl/{skcl}', [MarkerPlanOptionController::class, 'skclShow'])
+            ->where('skcl', '.+')
+            ->name('skcl.show');
+        Route::get('/colors/{skcl}', [MarkerPlanOptionController::class, 'colors'])
+            ->where('skcl', '.+')
+            ->name('colors');
+    });
+
 });
 
 

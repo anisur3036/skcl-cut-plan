@@ -30,6 +30,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/', [MarkerPlanController::class, 'index'])->name('index');
         Route::get('/create', [MarkerPlanController::class, 'create'])->name('create');
         Route::post('/', [MarkerPlanController::class, 'store'])->name('store');
+        Route::get('/summary', [MarkerPlanController::class, 'summary'])->name('summary');
         Route::get('/{markerPlan}/edit', [MarkerPlanController::class, 'edit'])->name('edit');
         Route::put('/{markerPlan}', [MarkerPlanController::class, 'update'])->name('update');
         Route::get('/{markerPlan}/pdf', [MarkerPlanController::class, 'pdf'])->name('pdf');

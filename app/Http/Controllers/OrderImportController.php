@@ -25,9 +25,9 @@ class OrderImportController extends Controller
         $request->validate([
             'file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
         ], [
-            'file.required' => 'একটি Excel ফাইল বাছুন।',
-            'file.mimes'    => 'শুধু .xlsx, .xls বা .csv ফাইল দেওয়া যাবে।',
-            'file.max'      => 'ফাইলের সাইজ ১০ MB-এর বেশি হতে পারবে না।',
+            'file.required' => 'Select a excel file',
+            'file.mimes'    => 'Extension will be xls, xlsx',
+            'file.max'      => 'Max file size 10M',
         ]);
 
         try {
@@ -41,9 +41,8 @@ class OrderImportController extends Controller
                 'orders_created' => 0,
                 'orders_updated' => 0,
                 'size_rows'      => 0,
-                'fabric_rows'    => 0,
                 'error_count'    => 1,
-                'errors'         => ['ফাইলটি পড়া বা সেভ করা যায়নি: ' . $e->getMessage()],
+                'errors'         => ['Unreadable file: ' . $e->getMessage()],
             ];
         }
 

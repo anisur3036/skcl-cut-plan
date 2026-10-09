@@ -49,38 +49,38 @@
         <p>No approved marker plan quantities for this selection.</p>
     @else
         <table class="grid">
-    <thead>
-        <tr>
-            <th class="left">Item</th>
-            <th class="left">Color</th>
-            @foreach ($sizes as $size)
-                <th>{{ $size }}</th>
-            @endforeach
-            <th>Total</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach ($rows as $row)
-            <tr>
-                <td class="left">{{ $row['item_name'] }}</td>
-                <td class="left">{{ $row['color_name'] }}</td>
-                @foreach ($sizes as $size)
-                    <td>{{ ($row['quantities'][$size] ?? 0) ?: '-' }}</td>
+            <thead>
+                <tr>
+                    <th class="left">Item</th>
+                    <th class="left">Color</th>
+                    @foreach ($sizes as $size)
+                        <th>{{ $size }}</th>
+                    @endforeach
+                    <th>Total</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($rows as $row)
+                    <tr>
+                        <td class="left">{{ $row['item_name'] }}</td>
+                        <td class="left">{{ $row['color_name'] }}</td>
+                        @foreach ($sizes as $size)
+                            <td>{{ ($row['quantities'][$size] ?? 0) ?: '-' }}</td>
+                        @endforeach
+                        <td><strong>{{ $row['total'] }}</strong></td>
+                    </tr>
                 @endforeach
-                <td><strong>{{ $row['total'] }}</strong></td>
-            </tr>
-        @endforeach
-    </tbody>
-    <tfoot>
-        <tr>
-            <td class="left" colspan="2">Total</td>
-            @foreach ($sizes as $size)
-                <td>{{ $totals['by_size'][$size] ?? 0 }}</td>
-            @endforeach
-            <td>{{ $totals['grand'] }}</td>
-        </tr>
-    </tfoot>
-</table>
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td class="left" colspan="2">Total</td>
+                    @foreach ($sizes as $size)
+                        <td>{{ $totals['by_size'][$size] ?? 0 }}</td>
+                    @endforeach
+                    <td>{{ $totals['grand'] }}</td>
+                </tr>
+            </tfoot>
+        </table>
     @endif
 
     <p class="muted">Only approved marker plans are counted in the quantities.</p>

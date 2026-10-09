@@ -31,6 +31,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         Route::get('/create', [MarkerPlanController::class, 'create'])->name('create');
         Route::post('/', [MarkerPlanController::class, 'store'])->name('store');
         Route::get('/summary', [MarkerPlanController::class, 'summary'])->name('summary');
+        Route::get('/summary/pdf', [MarkerPlanController::class, 'summaryPdf'])->name('summary.pdf');
         Route::get('/{markerPlan}/edit', [MarkerPlanController::class, 'edit'])->name('edit');
         Route::put('/{markerPlan}', [MarkerPlanController::class, 'update'])->name('update');
         Route::get('/{markerPlan}/pdf', [MarkerPlanController::class, 'pdf'])->name('pdf');
@@ -49,7 +50,6 @@ Route::middleware(['auth', 'verified'])->group(function () {
             ->where('skcl', '.+')
             ->name('colors');
     });
-
 });
 
 

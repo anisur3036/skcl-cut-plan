@@ -18,7 +18,6 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
-type StatusCount = { value: string; label: string; count: number };
 
 type SummaryInfo = {
   skcl_no: string;
@@ -28,7 +27,6 @@ type SummaryInfo = {
   shipment: string | null;
   plan_count: number;
   active_plan_count: number;
-  status_counts: StatusCount[];
   total_qty: number;
 };
 
@@ -54,12 +52,6 @@ type PageProps = {
 // Built by hand on purpose: the SKCL contains "/" and must not be URL-encoded
 const colorOptionsUrl = (skcl: string): string => `/marker-plan-options/colors/${skcl}`;
 
-const statusVariant = (status: string): 'default' | 'secondary' | 'destructive' | 'outline' => {
-  if (status === 'completed') return 'default';
-  if (status === 'approved') return 'secondary';
-  if (status === 'cancelled') return 'destructive';
-  return 'outline';
-};
 
 function InfoItem({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -175,7 +167,7 @@ export default function Summary({ skclNo, colorName, found, info, sizes, rows, t
                   </Link>
                 </Button>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
                 <dl className="grid grid-cols-2 gap-x-6 gap-y-4 text-sm md:grid-cols-4">
                   <InfoItem label="SKCL No">{info.skcl_no}</InfoItem>
                   <InfoItem label="File No">{info.file_no || '-'}</InfoItem>
@@ -183,25 +175,9 @@ export default function Summary({ skclNo, colorName, found, info, sizes, rows, t
                   <InfoItem label="Style">{info.style || '-'}</InfoItem>
                   <InfoItem label="Shipment">{info.shipment ?? '-'}</InfoItem>
                   <InfoItem label="Color">{colorName || 'All colors'}</InfoItem>
-                  <InfoItem label="Marker plans">
-                    {info.active_plan_count} active / {info.plan_count} total
-                  </InfoItem>
-                  <InfoItem label="Total planned qty">{info.total_qty}</InfoItem>
+                  <InfoItem label="Approved marker plans">{info.plan_count}</InfoItem>
+                  <InfoItem label="Total approved qty">{info.total_qty}</InfoItem>
                 </dl>
-
-                <div className="flex flex-wrap items-center gap-2 text-sm">
-                  <span className="text-muted-foreground">Status:</span>
-                  {info.status_counts.filter((s) => s.count > 0).length === 0 && (
-                    <span className="text-muted-foreground">No marker plans yet</span>
-                  )}
-                  {info.status_counts
-                    .filter((s) => s.count > 0)
-                    .map((s) => (
-                      <Badge key={s.value} variant={statusVariant(s.value)}>
-                        {s.label}: {s.count}
-                      </Badge>
-                    ))}
-                </div>
               </CardContent>
             </Card>
 

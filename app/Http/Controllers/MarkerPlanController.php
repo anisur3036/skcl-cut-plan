@@ -7,6 +7,7 @@ use App\Models\MarkerPlanDetail;
 use App\Models\Order;
 use App\Models\Table;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Support\Str;
 use Closure;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
@@ -261,14 +262,16 @@ class MarkerPlanController extends Controller
             return Inertia::render('marker-plan/summary', [...$base, 'found' => false]);
         }
 
-        $plans  = MarkerPlan::whereIn('order_id', $orders->pluck('id'))->get(['id', 'order_id', 'status']);
-        $active = $plans->where('status', '!=', MarkerPlan::STATUS_CANCELLED);
+        // Only approved marker plans are pulled
+        $plans = MarkerPlan::whereIn('order_id', $orders->pluck('id'))
+            ->where('status', MarkerPlan::STATUS_APPROVED)
+            ->get(['id', 'order_id', 'status']);
 
-        // Planned quantity per order and size (cancelled plans are excluded)
+        // Approved quantity per order and size
         $agg = MarkerPlanDetail::query()
             ->join('marker_plans', 'marker_plans.id', '=', 'marker_plan_details.marker_plan_id')
             ->whereIn('marker_plans.order_id', $orders->pluck('id'))
-            ->where('marker_plans.status', '!=', MarkerPlan::STATUS_CANCELLED)
+            ->where('marker_plans.status', MarkerPlan::STATUS_APPROVED)
             ->select(
                 'marker_plans.order_id',
                 'marker_plan_details.size',
@@ -279,7 +282,7 @@ class MarkerPlanController extends Controller
 
         $sizes      = $this->sizesFrom($agg);
         $cells      = $agg->keyBy(fn($r) => $r->order_id . '|' . $r->size)->map(fn($r) => (int) $r->qty);
-        $planCounts = $active->groupBy('order_id')->map->count();
+        $planCounts = $plans->groupBy('order_id')->map->count();
 
         $rows = $orders->map(function (Order $o) use ($sizes, $cells, $planCounts) {
             $quantities = [];
@@ -307,37 +310,25 @@ class MarkerPlanController extends Controller
         }
         $grand = array_sum($bySize);
 
-        $statusCounts = collect(MarkerPlan::STATUSES)
-            ->map(fn($label, $value) => [
-                'value' => $value,
-                'label' => $label,
-                'count' => $plans->where('status', $value)->count(),
-            ])
-            ->values()
-            ->all();
-
         $join = fn($values) => $values->filter()->unique()->implode(', ');
 
         return Inertia::render('marker-plan/summary', [
             ...$base,
             'found'  => true,
             'info'   => [
-                'skcl_no'           => $skclNo,
-                'file_no'           => $join($orders->pluck('file_no')),
-                'buyer'             => $join($orders->pluck('buyer.name')) ?: null,
-                'style'             => $join($orders->pluck('style')),
-                'shipment'          => $join($orders->pluck('shipment_date')->filter()->map(fn($d) => $d->format('d M Y'))) ?: null,
-                'plan_count'        => $plans->count(),
-                'active_plan_count' => $active->count(),
-                'status_counts'     => $statusCounts,
-                'total_qty'         => $grand,
+                'skcl_no'    => $skclNo,
+                'file_no'    => $join($orders->pluck('file_no')),
+                'buyer'      => $join($orders->pluck('buyer.name')) ?: null,
+                'style'      => $join($orders->pluck('style')),
+                'shipment'   => $join($orders->pluck('shipment_date')->filter()->map(fn($d) => $d->format('d M Y'))) ?: null,
+                'plan_count' => $plans->count(),
+                'total_qty'  => $grand,
             ],
             'sizes'  => $sizes,
             'rows'   => $rows,
             'totals' => ['by_size' => $bySize, 'grand' => $grand],
         ]);
     }
-
     public function pdf(MarkerPlan $markerPlan)
     {
         $markerPlan->load(['order.buyer', 'cuttingTable']);

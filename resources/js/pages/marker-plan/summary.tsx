@@ -4,7 +4,6 @@ import { Head, Link, router } from '@inertiajs/react';
 import MarkerPlanController from '@/actions/App/Http/Controllers/MarkerPlanController';
 import MarkerPlanOptionController from '@/actions/App/Http/Controllers/MarkerPlanOptionController';
 import { SearchableSelect } from '@/components/ui/searchable-select';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -34,7 +33,6 @@ type SummaryRow = {
   order_id: number;
   item_name: string;
   color_name: string;
-  plans: number;
   quantities: Record<string, number>;
   total: number;
 };
@@ -89,7 +87,12 @@ export default function Summary({ skclNo, colorName, found, info, sizes, rows, t
     );
   };
 
-  const planTotal = rows.reduce((sum, r) => sum + r.plans, 0);
+
+  // PDF always reflects the filter that is currently displayed
+  const pdfQuery: Record<string, string> = {
+    skcl_no: skclNo,
+    ...(colorName ? { color_name: colorName } : {}),
+  };
 
   return (
     <>
@@ -98,10 +101,20 @@ export default function Summary({ skclNo, colorName, found, info, sizes, rows, t
         {/* Filter */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-3">
-            <CardTitle>Marker Plan Summary</CardTitle>
-            <Button asChild variant="outline" size="sm">
-              <Link href={MarkerPlanController.index.url()}>← Back to List</Link>
-            </Button>
+            <CardTitle className="text-base">Marker Plan Information</CardTitle>
+            <div className="flex gap-2">
+              <Button asChild variant="outline" size="sm">
+                <a
+                  href={MarkerPlanController.summaryPdf.url({ query: pdfQuery })}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  PDF
+                </a>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSearch} className="flex flex-wrap items-end gap-3">
@@ -198,7 +211,6 @@ export default function Summary({ skclNo, colorName, found, info, sizes, rows, t
                         <TableRow>
                           <TableHead>Item</TableHead>
                           <TableHead>Color</TableHead>
-                          <TableHead className="text-center">Plans</TableHead>
                           {sizes.map((sz) => (
                             <TableHead key={sz} className="text-center">
                               {sz}
@@ -212,15 +224,12 @@ export default function Summary({ skclNo, colorName, found, info, sizes, rows, t
                           <TableRow key={r.order_id}>
                             <TableCell>{r.item_name}</TableCell>
                             <TableCell>{r.color_name}</TableCell>
-                            <TableCell className="text-center">{cell(r.plans)}</TableCell>
                             {sizes.map((sz) => (
                               <TableCell key={sz} className="text-center">
                                 {cell(r.quantities[sz] ?? 0)}
                               </TableCell>
                             ))}
-                            <TableCell className="text-right font-medium">
-                              {r.total}
-                            </TableCell>
+                            <TableCell className="text-right font-medium">{r.total}</TableCell>
                           </TableRow>
                         ))}
                       </TableBody>
@@ -229,17 +238,12 @@ export default function Summary({ skclNo, colorName, found, info, sizes, rows, t
                           <TableCell colSpan={2} className="font-semibold">
                             Total
                           </TableCell>
-                          <TableCell className="text-center font-semibold">
-                            {planTotal}
-                          </TableCell>
                           {sizes.map((sz) => (
                             <TableCell key={sz} className="text-center font-semibold">
                               {totals.by_size[sz] ?? 0}
                             </TableCell>
                           ))}
-                          <TableCell className="text-right font-bold">
-                            {totals.grand}
-                          </TableCell>
+                          <TableCell className="text-right font-bold">{totals.grand}</TableCell>
                         </TableRow>
                       </TableFooter>
                     </Table>
